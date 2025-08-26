@@ -34,6 +34,37 @@ This script automatically downloads the latest version from the [cursor-ai-downl
 
 This ensures you always get the most recent version available, eliminating the need for manual downloads.
 
+### 🔗 Download Source & Trust
+
+#### Official Download Repository
+The script automatically downloads Cursor AI AppImages from the **[cursor-ai-downloads repository](https://github.com/oslook/cursor-ai-downloads)** on GitHub. This repository is:
+
+- **Maintained by the community** with official Cursor AI releases
+- **Regularly updated** with the latest stable versions
+- **Verified source** for Linux AppImage downloads
+- **Trusted by the community** for automated installations
+
+#### How Version Detection Works
+1. **Repository Query**: The script queries the `README.md` file from `cursor-ai-downloads`
+2. **Version Extraction**: Parses the latest version number using pattern matching
+3. **Architecture Detection**: Determines your system (x64/ARM64) automatically
+4. **URL Construction**: Builds the correct download URL for your specific version and architecture
+5. **Secure Download**: Downloads directly from GitHub's CDN for fast and reliable transfers
+
+#### Version Format
+The script recognizes and handles Cursor versions in the format: `Cursor-X.Y.Z`
+- **X**: Major version (e.g., 1, 2, 3...)
+- **Y**: Minor version (e.g., 0, 1, 2...)
+- **Z**: Patch version (e.g., 0, 1, 5, 11...)
+
+#### Security & Verification
+- **SHA256 Checksums**: The repository provides checksums for verification
+- **Official Builds**: Downloads come from official Cursor AI builds
+- **GitHub CDN**: Downloads use GitHub's secure content delivery network
+- **Transparent Process**: You can manually verify the download URLs before installation
+
+**Manual Verification**: You can visit the [cursor-ai-downloads repository](https://github.com/oslook/cursor-ai-downloads) to see the latest available versions and verify the download URLs that the script will use.
+
 ### Language Support
 
 You can define the language to determine where the script will store and manage files. Set `LANG_SETTING` to `EN` for English or `ES` for Spanish. Depending on the chosen language, download and desktop directories will be assigned accordingly:

@@ -24,6 +24,8 @@
 - **Updated README**: Reflected new unified installation process
 - **Removed Legacy References**: Eliminated Stable/Nightly mode documentation
 - **Added Intelligent Update Handling**: Documented new process management features
+- **Added Download Source Documentation**: Detailed explanation of cursor-ai-downloads repository
+- **Added Security & Verification Section**: Information about download security and verification
 
 ### 🔄 Breaking Changes
 - **Removed Mode Selection**: No longer prompts for Stable/Nightly choice
