@@ -1,13 +1,14 @@
 # 🚀 Cursor Setup Ubuntu
 
-This repository contains the bash script **cursor-setup-ubuntu**, inspired by the [cursor-setup-wizard](https://github.com/jorcelinojunior/cursor-setup-wizard) repository. This version supports both **Stable** and **Nightly** modes for installing and configuring the **Cursor AI AppImage** on Ubuntu and its derivatives. **Cursor AI** is a powerful AI-assisted code editor, available at [cursor.com](https://www.cursor.com).
+This repository contains the bash script **cursor-setup-ubuntu**, inspired by the [cursor-setup-wizard](https://github.com/jorcelinojunior/cursor-setup-wizard) repository. This script automatically downloads and installs the latest version of the **Cursor AI AppImage** on Ubuntu and its derivatives. **Cursor AI** is a powerful AI-assisted code editor, available at [cursor.com](https://www.cursor.com).
 
 ## 🔧 About This Script
 
 The **cursor-setup-ubuntu** script automates the installation, updating, and management of the **Cursor AI AppImage** on Ubuntu-based systems. It provides the following functionalities:
 
-- **Automated Installation & Updates**: Install or update either the latest **Stable** or **Nightly** version of Cursor AI.
-- **Simultaneous Installations**: Allows both **Stable** and **Nightly** versions to coexist on the same system.
+- **Automated Installation & Updates**: Automatically downloads and installs the latest version of Cursor AI.
+- **Automatic Downloads**: Downloads the latest version directly from the cursor-ai-downloads repository without manual intervention.
+- **Architecture Detection**: Automatically detects and downloads the appropriate AppImage for your system (x64 or ARM64).
 - **Version Comparison**: Checks for the latest version and prompts for an update if necessary.
 - **Desktop Integration**: Creates or updates a desktop shortcut with an application icon.
 - **Executable Symlink Creation**: Allows launching Cursor AI from the terminal.
@@ -22,13 +23,16 @@ The **cursor-setup-ubuntu** script automates the installation, updating, and man
 
 Unlike the original `cursor-setup-wizard`, this version does not use **GUM** for user interface prompts. All interactions are handled using standard shell commands (e.g., `read`).
 
-### Support for Nightly/Beta Mode
+### Fully Automated Download
 
-This script supports both **Stable** and **Nightly** (beta) installations. In **Nightly mode**, it automatically downloads the latest version from the official source.
+This script automatically downloads the latest version from the [cursor-ai-downloads repository](https://github.com/oslook/cursor-ai-downloads). The script will:
 
-### Manual Stable Download
+1. Detect your system architecture (x64 or ARM64)
+2. Fetch the latest version information from the repository
+3. Automatically download the appropriate AppImage for your system
+4. Install and configure the application
 
-Since Cursor AI releases stable versions in stages, the **Stable** download is not automated. You must manually download the Stable AppImage from [Cursor AI's official website](https://www.cursor.com/) and provide the filename when prompted. This ensures that you install the version you want, as the website may sometimes offer an older version than the one already installed.
+This ensures you always get the most recent version available, eliminating the need for manual downloads.
 
 ### Language Support
 
@@ -68,13 +72,9 @@ chmod +x cursor-setup-ubuntu.sh
 
 ### Run the Script
 
-Before running the script, open `cursor-setup-ubuntu.sh` and verify the `LANG_SETTING="EN"` variable. Set it to either `EN` (English) or `ES` (Spanish) to ensure the correct directory paths are used.
+The script is ready to use with English language settings by default. If you prefer Spanish, you can optionally modify the `LANG_SETTING` variable in the script.
 
-```bash
-nano cursor-setup-ubuntu.sh  # Edit this line if needed
-```
-
-After verifying the language setting, execute the script:
+Execute the script:
 
 ```bash
 ./cursor-setup-ubuntu.sh
@@ -95,54 +95,41 @@ cursor-setup-ubuntu
 
 You will be presented with a text-based menu offering the following options:
 
-1. **Install or update Cursor AI AppImage** (Choose between Stable and Nightly modes)
-2. **Create or update the desktop shortcut**
-3. **Exit the script**
+1. **Install/Update Cursor** - Automatically downloads and installs the latest version
+2. **Update Desktop Shortcut** - Creates or updates the desktop shortcut and icon
+3. **Exit** - Exit the script
 
 ---
 
 ## 🚀 Usage
 
-### Stable Mode
+### Automatic Installation
 
-1. Download the Stable AppImage from [Cursor AI's website](https://www.cursor.com/) (click the "Download" button).
-2. When prompted, enter only the filename (e.g., `cursor-0.45.11-x86_64.AppImage`). The file must be located in your `Downloads` folder.
-3. The script will install and configure the application accordingly.
-
-### Nightly Mode
-
-1. The script will automatically download the latest Nightly AppImage from [Cursor AI's Nightly builds](https://nightlymagic.cursor.sh/).
+1. The script will automatically detect your system architecture and download the latest version.
 2. It will compare the installed version (if any) with the new version.
 3. You will be prompted to either update, reinstall, or cancel the operation.
-
-### Simultaneous Installation of Stable and Nightly Versions
-
-- Both **Stable** and **Nightly** versions can be installed and used simultaneously without conflicts.
-- The script maintains separate installations:
-  - **Stable version:** Launched with `cursor`
-  - **Nightly version:** Launched with `cursor-nightly`
+4. The script will install and configure the application accordingly.
 
 ### 🖥️ Desktop Shortcut & Executable Symlink
 
 - The script creates or updates a desktop shortcut that launches the AppImage with the `--no-sandbox` flag.
 
-- A wrapper script is generated, and a symlink is set up in `/usr/local/bin` so you can launch the AppImage from the terminal:
-
-  - **For Stable:** `cursor`
-  - **For Nightly:** `cursor-nightly`
+- A wrapper script is generated, and a symlink is set up in `/usr/local/bin` so you can launch the AppImage from the terminal using `cursor`.
 
 - A single alias (`cursor-setup-ubuntu`) is also created for easy future access to the script.
 
 - The script ensures compatibility with **bashrc** and **zshrc**, so users can execute commands seamlessly from both Bash and Zsh shells.
 
-- The script creates or updates a desktop shortcut that launches the AppImage with the `--no-sandbox` flag.
+### 🔄 Intelligent Update Handling
 
-- A wrapper script is generated, and a symlink is set up in `/usr/local/bin` so you can launch the AppImage from the terminal:
+When updating Cursor, the script intelligently handles situations where the AppImage file is currently in use:
 
-  - **For Stable:** `cursor`
-  - **For Nightly:** `cursor-nightly`
+- **Automatic Detection**: Uses `lsof` to detect if the current AppImage is being used by running processes
+- **Safe Backup**: Creates timestamped backups before replacing files
+- **Process Management**: Offers to terminate conflicting processes (with user confirmation)
+- **Graceful Handling**: If you run the script from within Cursor, it will detect this and ask for confirmation
 
-- A single alias (`cursor-setup-ubuntu`) is also created for easy future access to the script.
+**Note**: If running the script from within Cursor, it will detect that the AppImage is in use and offer to terminate the process. This is normal behavior and ensures safe updates.
 
 ---
 
@@ -158,7 +145,7 @@ You will be presented with a text-based menu offering the following options:
 
 This project is not affiliated with Cursor AI. It is an independent effort to improve the installation and update experience on Linux, addressing common setup steps and potential issues.
 
-This script is inspired by the original `cursor-setup-wizard` project and has been adapted to support both Stable and Nightly modes on Ubuntu without using GUM.
+This script is inspired by the original `cursor-setup-wizard` project and has been adapted to automatically download the latest version on Ubuntu without using GUM.
 
 ## 🤝 Contributing
 

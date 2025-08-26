@@ -24,16 +24,7 @@ else
   readonly USER_DOWNLOADS_DIR="$REAL_HOME/Descargas"
 fi
 
-# -------------------------------------------------------------------
-# Colors (currently unused, but retained for future use)
-# -------------------------------------------------------------------
-readonly CLR_SCS="#16FF15"   # success
-readonly CLR_INF="#0095FF"   # info
-readonly CLR_BG="#131313"    # background
-readonly CLR_PRI="#6B30DA"   # primary
-readonly CLR_ERR="#FB5854"   # error
-readonly CLR_WRN="#FFDA33"   # warning
-readonly CLR_LGT="#F9F5E2"   # light
+
 
 # -------------------------------------------------------------------
 # Simple logging function: prints messages with a prefix
@@ -52,48 +43,24 @@ logg() {
 }
 
 # -------------------------------------------------------------------
-# Spinner function: shows a simple spinner while a command runs
+# Simple delay with message
 # -------------------------------------------------------------------
-spinner() {
+show_message() {
   local message="$1"
-  local command="$2"
-  local delay=0.1
-  local spin_chars='-\|/'
-  local i=0
-
-  eval "$command" &
-  local pid=$!
-
-  while kill -0 "$pid" 2>/dev/null; do
-    i=$(( (i+1) % 4 ))
-    printf "\r%s %s" "$message" "${spin_chars:$i:1}"
-    sleep $delay
-  done
-
-  wait "$pid"
-  printf "\r%s ✓\n" "$message"
+  echo "$message"
 }
 
-# -------------------------------------------------------------------
-# If true, older versions (with the same CLI_COMMAND_NAME) will be removed after installation.
-# -------------------------------------------------------------------
-readonly REMOVE_PREVIOUS=true
+
 
 # -------------------------------------------------------------------
 # Remove older versions, keeping only the newest one.
 # -------------------------------------------------------------------
 remove_old_versions() {
-  local pattern
-  if $NIGHTLY_MODE; then
-    pattern="$DOWNLOAD_DIR/cursor-nightly-*.AppImage"
-  else
-    pattern="$DOWNLOAD_DIR/cursor-[0-9]*.AppImage"
-  fi
   local newest_file
-  newest_file=$(ls -1t $pattern 2>/dev/null | head -n 1 || true)
+  newest_file=$(ls -1t $APPIMAGE_PATTERN 2>/dev/null | head -n 1 || true)
   if [[ -n "$newest_file" ]]; then
     local older_files
-    older_files=$(ls -1t $pattern 2>/dev/null | tail -n +2 || true)
+    older_files=$(ls -1t $APPIMAGE_PATTERN 2>/dev/null | tail -n +2 || true)
     if [[ -n "$older_files" ]]; then
       logg info "Removing older versions in $DOWNLOAD_DIR..."
       rm -f $older_files
@@ -107,93 +74,112 @@ remove_old_versions() {
 # -------------------------------------------------------------------
 confirm_action() {
   local question="$1"
-  echo -e "$question [y/N]"
-  read -rp "> " response
-  case "$response" in
-    [yY]|[yY][eE][sS]) return 0 ;;
-    *) return 1 ;;
-  esac
+  read -rp "$question [y/N]: " response
+  [[ "$response" =~ ^[Yy]$ ]]
 }
 
+
+
 # -------------------------------------------------------------------
-# Download the Nightly AppImage (saves to USER_DOWNLOADS_DIR)
+# Detect system architecture (x86_64 or aarch64)
 # -------------------------------------------------------------------
-download_latest_nightly() {
-  logg prompt "Checking remote version headers from https://nightlymagic.cursor.sh/ ..."
-  local remote_headers
-  remote_headers=$(curl -sD - -o /dev/null --max-time 10 \
-    -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
-    https://nightlymagic.cursor.sh/)
-  
-  local remote_filename
-  remote_filename=$(echo "$remote_headers" | grep -i "content-disposition:" | sed -E 's/.*filename="([^"]+)".*/\1/I')
-  
-  if [[ -z "$remote_filename" ]]; then
-    logg error "Could not extract remote filename from headers."
-    return 1
-  fi
-  
-  if [[ "$remote_filename" != *.AppImage ]]; then
-    logg error "Remote file ($remote_filename) does not appear to be an AppImage."
-    return 1
-  fi
-  
-  logg info "Downloading file: $remote_filename"
-  
-  pushd "$USER_DOWNLOADS_DIR" >/dev/null
-  
-  if [[ -f "$remote_filename" ]]; then
-    logg info "File $remote_filename already exists. Removing old version..."
-    rm -f "$remote_filename"
-  fi
-  
-  curl -L -OJ -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" https://nightlymagic.cursor.sh/
-  
-  if [[ ! -f "$remote_filename" ]]; then
-    popd >/dev/null
-    logg error "Failed to download the Nightly file."
-    return 1
-  fi
-  
-  popd >/dev/null
-  
-  # Update global variable to point to the downloaded file
-  LOCAL_APPIMAGE_PATH="$USER_DOWNLOADS_DIR/$remote_filename"
-  logg success "Downloaded file: $LOCAL_APPIMAGE_PATH"
+detect_architecture() {
+  local arch
+  arch=$(uname -m)
+  case "$arch" in
+    x86_64)
+      echo "x64"
+      ;;
+    aarch64)
+      echo "arm64"
+      ;;
+    *)
+      logg error "Unsupported architecture: $arch"
+      return 1
+      ;;
+  esac
   return 0
 }
 
 # -------------------------------------------------------------------
-# Ask the user to choose between Stable and Nightly versions (text menu)
+# Get latest stable version from cursor-ai-downloads repository
 # -------------------------------------------------------------------
-echo "Select the version to install:"
-echo "1) Stable"
-echo "2) Nightly"
-read -rp "Enter choice [1-2]: " version_choice
-if [[ "$version_choice" == "2" ]]; then
-  NIGHTLY_MODE=true
-  readonly CLI_COMMAND_NAME="cursor-nightly"
-  readonly USER_DESKTOP_FILE="$USER_DESKTOP_DIR/cursor-nightly.desktop"
-  readonly SYSTEM_DESKTOP_FILE="$REAL_HOME/.local/share/applications/cursor-nightly.desktop"
-  readonly DESKTOP_NAME="Cursor Nightly"
-  readonly APPARMOR_PROFILE="/etc/apparmor.d/cursor-nightly-appimage"
-else
-  NIGHTLY_MODE=false
-  readonly CLI_COMMAND_NAME="cursor"
-  readonly USER_DESKTOP_FILE="$USER_DESKTOP_DIR/cursor.desktop"
-  readonly SYSTEM_DESKTOP_FILE="$REAL_HOME/.local/share/applications/cursor.desktop"
-  readonly DESKTOP_NAME="Cursor"
-  readonly APPARMOR_PROFILE="/etc/apparmor.d/cursor-appimage"
-  # For Stable mode, prompt only for the filename.
-  echo "For Stable mode, please download the AppImage from https://www.cursor.com/ (click the 'Download' icon)."
-  echo "Then, enter only the filename (e.g., cursor-0.45.11x86_64.AppImage) that is located in:"
-  echo "  $USER_DOWNLOADS_DIR"
-  read -rp "> " stable_filename
-  if [[ -z "$stable_filename" ]]; then
-    stable_filename="cursor-0.45.11x86_64.AppImage"
+get_latest_stable_version() {
+  local repo_content
+  repo_content=$(curl -s --max-time 10 \
+    -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
+    https://raw.githubusercontent.com/oslook/cursor-ai-downloads/main/README.md)
+
+  if [[ -z "$repo_content" ]]; then
+    return 1
   fi
-  LOCAL_APPIMAGE_PATH="$USER_DOWNLOADS_DIR/$stable_filename"
-fi
+
+  # Extract the latest version from the main download link
+  local latest_version
+  latest_version=$(echo "$repo_content" | grep -oE "Cursor [0-9]+\.[0-9]+\.[0-9]+" | head -1 | sed 's/Cursor //')
+
+  if [[ -z "$latest_version" ]]; then
+    return 1
+  fi
+
+  printf "%s" "$latest_version"
+  return 0
+}
+
+# -------------------------------------------------------------------
+# Download the latest stable AppImage from cursor-ai-downloads repository
+# -------------------------------------------------------------------
+download_latest_stable() {
+  logg prompt "Checking latest stable version from cursor-ai-downloads repository..."
+
+  local arch
+  arch=$(detect_architecture)
+  if [[ $? -ne 0 ]]; then
+    return 1
+  fi
+
+  local latest_version
+  latest_version=$(get_latest_stable_version)
+  if [[ $? -ne 0 ]]; then
+    logg error "Could not fetch repository content."
+    return 1
+  fi
+
+  local filename="Cursor-$latest_version"
+  if [[ "$arch" == "x64" ]]; then
+    filename="${filename}-x86_64.AppImage"
+  else
+    filename="${filename}-aarch64.AppImage"
+  fi
+
+  local url="https://downloads.cursor.com/production/823f58d4f60b795a6aefb9955933f3a2f0331d7b/linux/$arch/$filename"
+
+  logg info "Latest stable version: $latest_version"
+  logg info "Downloading file: $filename"
+  logg info "Download URL: $url"
+
+  pushd "$USER_DOWNLOADS_DIR" >/dev/null
+
+  if [[ -f "$filename" ]]; then
+    logg info "File $filename already exists. Removing old version..."
+    rm -f "$filename"
+  fi
+
+  curl -L -o "$filename" -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" "$url"
+
+  if [[ ! -f "$filename" ]]; then
+    popd >/dev/null
+    logg error "Failed to download the stable file."
+    return 1
+  fi
+
+  popd >/dev/null
+
+  # Update global variable to point to the downloaded file
+  LOCAL_APPIMAGE_PATH="$USER_DOWNLOADS_DIR/$filename"
+  logg success "Downloaded file: $LOCAL_APPIMAGE_PATH"
+  return 0
+}
 
 # -------------------------------------------------------------------
 # Common variables and constants
@@ -201,28 +187,29 @@ fi
 readonly DOWNLOAD_DIR="$REAL_HOME/.AppImage"
 readonly ICON_DIR="$REAL_HOME/.local/share/icons"
 readonly ICON_URL="https://mintlify.s3-us-west-1.amazonaws.com/cursor/images/logo/app-logo.svg"
-# Set a unique alias for the script regardless of mode
+readonly CLI_COMMAND_NAME="cursor"
+readonly USER_DESKTOP_FILE="$USER_DESKTOP_DIR/cursor.desktop"
+readonly SYSTEM_DESKTOP_FILE="$REAL_HOME/.local/share/applications/cursor.desktop"
+readonly DESKTOP_NAME="Cursor"
+readonly APPARMOR_PROFILE="/etc/apparmor.d/cursor-appimage"
 readonly SCRIPT_ALIAS_NAME="cursor-setup-ubuntu"
+readonly APPIMAGE_PATTERN="$DOWNLOAD_DIR/Cursor-[0-9]*.AppImage"
+
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+
+# Global variable for the AppImage path (will be set by download functions)
+LOCAL_APPIMAGE_PATH=""
 
 # -------------------------------------------------------------------
 # Function to extract version from the AppImage filename
-# For Nightly, allow two or three numeric groups.
 # -------------------------------------------------------------------
 extract_version() {
   local filename="$1"
-  if [[ "$filename" == *nightly* ]]; then
-    if [[ "$filename" =~ cursor-nightly-([0-9]+\.[0-9]+(\.[0-9]+)?) ]]; then
-      echo "${BASH_REMATCH[1]}"
-      return
-    fi
-  else
-    if [[ "$filename" =~ cursor-([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-      echo "${BASH_REMATCH[1]}"
-      return
-    fi
+  if [[ "$filename" =~ Cursor-([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+    printf "%s" "${BASH_REMATCH[1]}"
+    return
   fi
-  echo "unknown"
+  printf "unknown"
 }
 
 # -------------------------------------------------------------------
@@ -283,28 +270,15 @@ update_apparmor_profile() {
     logg error "Sudo privileges are required to update the AppArmor profile."
     return 1
   fi
-  local APPARMOR_PROFILE_CONTENT
-  if $NIGHTLY_MODE; then
-    APPARMOR_PROFILE_CONTENT="  
-#include <tunables/global>
-profile cursor-nightly-appimage flags=(attach_disconnected,mediate_deleted) {
-    /home/*/.AppImage/cursor-nightly-*.AppImage ix,
-    /etc/{passwd,group,shadow} r,
-    /usr/bin/env rix,
-    /usr/bin/{bash,sh} rix,
-}
-"
-  else
-    APPARMOR_PROFILE_CONTENT="
+  local APPARMOR_PROFILE_CONTENT="
 #include <tunables/global>
 profile cursor-appimage flags=(attach_disconnected,mediate_deleted) {
-    /home/*/.AppImage/cursor-*.AppImage ix,
+    /home/*/.AppImage/Cursor-*.AppImage ix,
     /etc/{passwd,group,shadow} r,
     /usr/bin/env rix,
     /usr/bin/{bash,sh} rix,
 }
 "
-  fi
   echo "$APPARMOR_PROFILE_CONTENT" | sudo tee "$APPARMOR_PROFILE" >/dev/null
   logg info "Profile copied to $APPARMOR_PROFILE"
   sudo apparmor_parser -r "$APPARMOR_PROFILE"
@@ -321,149 +295,119 @@ profile cursor-appimage flags=(attach_disconnected,mediate_deleted) {
 # -------------------------------------------------------------------
 install_appimage() {
   local file="$1"
+  local filename
+  filename=$(basename "$file")
+  local target_path="$DOWNLOAD_DIR/$filename"
+
   logg info "Installing AppImage: $file"
+
   mkdir -p "$DOWNLOAD_DIR"
-  cp "$file" "$DOWNLOAD_DIR/"
-  chmod +x "$DOWNLOAD_DIR/$(basename "$file")"
-  # Update global variable to point to the installed file
-  LOCAL_APPIMAGE_PATH="$DOWNLOAD_DIR/$(basename "$file")"
-  logg success "AppImage installed to $DOWNLOAD_DIR/$(basename "$file")"
-  if [ "$REMOVE_PREVIOUS" = true ]; then
-    remove_old_versions
+
+  # Check if target file already exists and is busy
+  if [[ -f "$target_path" ]]; then
+    logg info "Target file exists, checking if it's in use..."
+
+    # Try to find processes using the file
+    local pids_using_file
+    pids_using_file=$(lsof "$target_path" 2>/dev/null | awk 'NR>1 {print $2}' | sort -u || true)
+
+    if [[ -n "$pids_using_file" ]]; then
+      logg warn "File is currently in use by processes: $pids_using_file"
+      if confirm_action "Terminate processes using the file and continue?"; then
+        for pid in $pids_using_file; do
+          if kill -TERM "$pid" 2>/dev/null; then
+            logg info "Terminated process $pid"
+            sleep 2
+          fi
+        done
+      else
+        logg info "Installation cancelled by user."
+        return 1
+      fi
+    fi
+
+    # Backup existing file before replacement
+    local backup_file="$target_path.backup.$(date +%Y%m%d_%H%M%S)"
+    logg info "Creating backup: $backup_file"
+    mv "$target_path" "$backup_file"
   fi
-  update_desktop_shortcut
-  update_apparmor_profile
-  update_executable_symlink
+
+  # Copy the new file
+  if cp "$file" "$target_path"; then
+    chmod +x "$target_path"
+    # Update global variable to point to the installed file
+    LOCAL_APPIMAGE_PATH="$target_path"
+    logg success "AppImage installed to $target_path"
+
+    # Remove old versions (excluding the backup we just created)
+    remove_old_versions
+
+    # Update system integration
+    update_desktop_shortcut
+    update_apparmor_profile
+    update_executable_symlink
+
+    logg success "Installation completed successfully!"
+  else
+    logg error "Failed to install AppImage. You may need to close Cursor and try again."
+    return 1
+  fi
 }
 
 # -------------------------------------------------------------------
 # Function to compare the installed version with the new version and act accordingly
 # -------------------------------------------------------------------
 check_version() {
-  if $NIGHTLY_MODE; then
-    local pattern="$DOWNLOAD_DIR/cursor-nightly-*.AppImage"
-    local installed_file
-    installed_file=$(ls -1t $pattern 2>/dev/null | head -n 1 || true)
-    local installed_ver="none"
-    if [[ -n "$installed_file" ]]; then
-      installed_ver=$(extract_version "$(basename "$installed_file")")
-      logg info "Installed version detected: $installed_ver"
-    else
-      logg info "No installed version detected."
-    fi
-    local remote_headers
-    remote_headers=$(curl -sD - -o /dev/null --max-time 10 \
-      -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
-      https://nightlymagic.cursor.sh/)
-    local remote_filename
-    remote_filename=$(echo "$remote_headers" | grep -i "content-disposition:" | sed -E 's/.*filename="([^"]+)".*/\1/I')
-    if [[ -z "$remote_filename" ]]; then
-      logg error "Could not extract remote filename from headers."
-      return 1
-    fi
-    local remote_ver
-    remote_ver=$(extract_version "$remote_filename")
-    logg info "Remote version detected: $remote_ver"
-    if [[ "$installed_ver" == "none" ]]; then
-      if confirm_action "No previous installation detected. Install version $remote_ver?"; then
-        download_latest_nightly && install_appimage "$LOCAL_APPIMAGE_PATH"
-      else
-        logg info "Installation cancelled. Returning to main menu."
-        return 0
-      fi
-    else
-      if [[ "$installed_ver" == "$remote_ver" ]]; then
-        if confirm_action "Version $installed_ver is already installed. Reinstall?"; then
-          download_latest_nightly && install_appimage "$LOCAL_APPIMAGE_PATH"
-        else
-          logg info "Installation cancelled. Returning to main menu."
-          return 0
-        fi
-      else
-        if [[ "$remote_ver" > "$installed_ver" ]]; then
-          if confirm_action "Update from version $installed_ver to $remote_ver?"; then
-            download_latest_nightly && install_appimage "$LOCAL_APPIMAGE_PATH"
-          else
-            logg info "Update cancelled. Returning to main menu."
-            return 0
-          fi
-        else
-          if confirm_action "Remote version ($remote_ver) seems older than installed ($installed_ver). Reinstall anyway?"; then
-            download_latest_nightly && install_appimage "$LOCAL_APPIMAGE_PATH"
-          else
-            logg info "Installation cancelled. Returning to main menu."
-            return 0
-          fi
-        fi
-      fi
-    fi
-  else
-    local pattern="$DOWNLOAD_DIR/cursor-[0-9]*.AppImage"
-    local new_file="$LOCAL_APPIMAGE_PATH"
-    if [[ ! -f "$new_file" ]]; then
-      logg error "Stable AppImage not found at $new_file"
-      return 1
-    fi
-    local new_filename
-    new_filename=$(basename "$new_file")
-    local new_ver
-    new_ver=$(extract_version "$new_filename")
-    local installed_file
-    installed_file=$(ls -1t $pattern 2>/dev/null | head -n 1 || true)
-    if [[ -n "$installed_file" ]]; then
-      # Discard any file that is Nightly if running in Stable mode
-      if [[ "$(basename "$installed_file")" == *nightly* ]]; then
-        installed_file=""
-      fi
-    fi
-    if [[ -n "$installed_file" ]]; then
-      local installed_ver
-      installed_ver=$(extract_version "$(basename "$installed_file")")
-      logg info "Installed version detected: $installed_ver"
-      if [[ "$installed_ver" == "$new_ver" ]]; then
-        if confirm_action "Version $new_ver is already installed. Reinstall?"; then
-          install_appimage "$new_file"
-        else
-          logg info "Installation cancelled. Returning to main menu."
-          return 0
-        fi
-      else
-        if confirm_action "Update from version $installed_ver to $new_ver?"; then
-          install_appimage "$new_file"
-        else
-          logg info "Update cancelled. Returning to main menu."
-          return 0
-        fi
-      fi
-    else
-      if confirm_action "No previous installation detected. Install version $new_ver?"; then
+  local new_file="$LOCAL_APPIMAGE_PATH"
+  if [[ ! -f "$new_file" ]]; then
+    logg error "AppImage not found at $new_file"
+    return 1
+  fi
+  local new_filename
+  new_filename=$(basename "$new_file")
+  local new_ver
+  new_ver=$(extract_version "$new_filename")
+  logg info "New version to install: $new_ver"
+  local installed_file
+  installed_file=$(ls -1t $APPIMAGE_PATTERN 2>/dev/null | head -n 1 || true)
+
+  if [[ -n "$installed_file" ]]; then
+    local installed_ver
+    installed_ver=$(extract_version "$(basename "$installed_file")")
+    logg info "Installed version detected: $installed_ver"
+    if [[ "$installed_ver" == "$new_ver" ]]; then
+      if confirm_action "Version $new_ver is already installed. Reinstall?"; then
         install_appimage "$new_file"
       else
         logg info "Installation cancelled. Returning to main menu."
         return 0
       fi
+    else
+      if confirm_action "Update from version $installed_ver to $new_ver?"; then
+        install_appimage "$new_file"
+      else
+        logg info "Update cancelled. Returning to main menu."
+        return 0
+      fi
+    fi
+  else
+    if confirm_action "No previous installation detected. Install version $new_ver?"; then
+      install_appimage "$new_file"
+    else
+      logg info "Installation cancelled. Returning to main menu."
+      return 0
     fi
   fi
 }
 
-# -------------------------------------------------------------------
-# For Stable mode: validate that the local AppImage file exists.
-# -------------------------------------------------------------------
-validate_local_appimage() {
-  if [[ ! -f "$LOCAL_APPIMAGE_PATH" && "$NIGHTLY_MODE" == false ]]; then
-    logg error "AppImage file not found at: $LOCAL_APPIMAGE_PATH
-Please ensure that:
-  1. You enter only the filename (e.g., cursor-0.45.11x86_64.AppImage) located in $USER_DOWNLOADS_DIR."
-    exit 1
-  fi
-}
+
 
 # -------------------------------------------------------------------
 # Validate the operating system (must be Ubuntu or derivative)
 # -------------------------------------------------------------------
 validate_os() {
+  show_message "Checking system compatibility..."
   local os_name
-  spinner "Checking system compatibility..." "sleep 1"
   os_name=$(grep -i '^NAME=' /etc/os-release | cut -d= -f2 | tr -d '"')
   if ! grep -iqE "ubuntu|kubuntu|xubuntu|lubuntu|pop!_os|elementary|zorin|linux mint" /etc/os-release; then
     logg error "This script is intended for Ubuntu and its derivatives. Detected: $os_name. Exiting..."
@@ -499,31 +443,40 @@ install_script_alias() {
 menu() {
   while true; do
     echo
-    echo "=== MAIN MENU ==="
-    echo "1) Install AppImage"
-    echo "2) Create Desktop Shortcut"
+    echo "=== Cursor Setup Menu ==="
+    echo "1) Install/Update Cursor"
+    echo "2) Update Desktop Shortcut"
     echo "3) Exit"
-    read -rp "Select an option [1-3]: " choice
+    read -rp "Select option [1-3]: " choice
     case "$choice" in
       1) check_version ;;
       2) update_desktop_shortcut ;;
-      3) logg info "Exiting..."; exit 0 ;;
-      *) logg error "Invalid selection." ;;
+      3|"") logg info "Exiting..."; exit 0 ;;
+      *) logg error "Invalid option. Please choose 1-3." ;;
     esac
   done
 }
 
 # -------------------------------------------------------------------
-# Main function: validate OS, install alias, then show menu
+# Function to initialize the script by downloading the latest version
+# -------------------------------------------------------------------
+initialize_script() {
+  logg info "Downloading the latest version of Cursor automatically..."
+  if ! download_latest_stable; then
+    logg error "Failed to download the latest version. Please check your internet connection and try again."
+    exit 1
+  fi
+}
+
+# -------------------------------------------------------------------
+# Main function: validate OS, install alias, initialize, then show menu
 # -------------------------------------------------------------------
 main() {
   clear
   validate_os
   install_script_alias
-  if ! $NIGHTLY_MODE; then
-    validate_local_appimage
-  fi
-  spinner "Starting up..." "sleep 1"
+  initialize_script
+  show_message "Starting up..."
   menu
 }
 
