@@ -126,20 +126,40 @@ cursor-setup-ubuntu
 
 You will be presented with a text-based menu offering the following options:
 
-1. **Install/Update Cursor** - Automatically downloads and installs the latest version
-2. **Update Desktop Shortcut** - Creates or updates the desktop shortcut and icon
+1. **Check for Updates & Install/Update Cursor** - Intelligently checks your current installation, compares with the latest version, and only downloads/installs if necessary
+2. **Update Desktop Shortcut** - Creates or updates the desktop shortcut and icon (useful if you manually moved the AppImage)
 3. **Exit** - Exit the script
 
 ---
 
 ## 🚀 Usage
 
-### Automatic Installation
+### Intelligent Installation & Update Process
 
-1. The script will automatically detect your system architecture and download the latest version.
-2. It will compare the installed version (if any) with the new version.
-3. You will be prompted to either update, reinstall, or cancel the operation.
-4. The script will install and configure the application accordingly.
+The script uses an intelligent process that avoids unnecessary downloads:
+
+#### First-Time Installation:
+1. **Check Installation**: Detects that Cursor is not installed
+2. **Fetch Latest Version**: Queries the latest version from the repository
+3. **Download Confirmation**: Asks if you want to download the latest version
+4. **Smart Download**: Downloads only if you confirm
+5. **Installation**: Installs and configures the application
+
+#### Update Process:
+1. **Check Current Version**: Detects your currently installed version
+2. **Compare Versions**: Compares with the latest available version
+3. **Update Assessment**:
+   - **Up to date**: Shows success message, no download needed
+   - **Update available**: Shows version difference and asks for confirmation
+   - **Not installed**: Offers fresh installation
+4. **Selective Download**: Downloads only if update is needed and confirmed
+5. **Smart Installation**: Handles file conflicts and creates backups automatically
+
+#### Key Benefits:
+- **No unnecessary downloads** - Only downloads when needed
+- **Bandwidth efficient** - Avoids re-downloading the same version
+- **User control** - Always asks before downloading large files
+- **Intelligent detection** - Knows your current installation status
 
 ### 🖥️ Desktop Shortcut & Executable Symlink
 

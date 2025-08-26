@@ -358,46 +358,34 @@ install_appimage() {
 # Function to compare the installed version with the new version and act accordingly
 # -------------------------------------------------------------------
 check_version() {
-  local new_file="$LOCAL_APPIMAGE_PATH"
-  if [[ ! -f "$new_file" ]]; then
-    logg error "AppImage not found at $new_file"
-    return 1
-  fi
-  local new_filename
-  new_filename=$(basename "$new_file")
-  local new_ver
-  new_ver=$(extract_version "$new_filename")
-  logg info "New version to install: $new_ver"
-  local installed_file
-  installed_file=$(ls -1t $APPIMAGE_PATTERN 2>/dev/null | head -n 1 || true)
+  # Check current installation status
+  local installed_version
+  installed_version=$(check_cursor_installation)
 
-  if [[ -n "$installed_file" ]]; then
-    local installed_ver
-    installed_ver=$(extract_version "$(basename "$installed_file")")
-    logg info "Installed version detected: $installed_ver"
-    if [[ "$installed_ver" == "$new_ver" ]]; then
-      if confirm_action "Version $new_ver is already installed. Reinstall?"; then
-        install_appimage "$new_file"
-      else
-        logg info "Installation cancelled. Returning to main menu."
-        return 0
+  # Check for updates
+  local latest_version
+  latest_version=$(check_for_updates "$installed_version")
+  local update_status=$?
+
+  case $update_status in
+    0)  # Update available or installation needed
+      if handle_download_decision "$latest_version" "$installed_version"; then
+        # Download was successful, now install
+        if [[ -f "$LOCAL_APPIMAGE_PATH" ]]; then
+          install_appimage "$LOCAL_APPIMAGE_PATH"
+        else
+          logg error "Download completed but AppImage file not found."
+          return 1
+        fi
       fi
-    else
-      if confirm_action "Update from version $installed_ver to $new_ver?"; then
-        install_appimage "$new_file"
-      else
-        logg info "Update cancelled. Returning to main menu."
-        return 0
-      fi
-    fi
-  else
-    if confirm_action "No previous installation detected. Install version $new_ver?"; then
-      install_appimage "$new_file"
-    else
-      logg info "Installation cancelled. Returning to main menu."
-      return 0
-    fi
-  fi
+      ;;
+    1)  # Error checking for updates
+      logg error "Could not check for updates. Please try again later."
+      ;;
+    2)  # No update needed
+      logg success "Your Cursor installation is up to date!"
+      ;;
+  esac
 }
 
 
@@ -444,8 +432,8 @@ menu() {
   while true; do
     echo
     echo "=== Cursor Setup Menu ==="
-    echo "1) Install/Update Cursor"
-    echo "2) Update Desktop Shortcut"
+    echo "1) Check for Updates & Install/Update Cursor"
+    echo "2) Update Desktop Shortcut Only"
     echo "3) Exit"
     read -rp "Select option [1-3]: " choice
     case "$choice" in
@@ -458,13 +446,81 @@ menu() {
 }
 
 # -------------------------------------------------------------------
-# Function to initialize the script by downloading the latest version
+# Function to check if Cursor is already installed and get version info
 # -------------------------------------------------------------------
-initialize_script() {
-  logg info "Downloading the latest version of Cursor automatically..."
-  if ! download_latest_stable; then
-    logg error "Failed to download the latest version. Please check your internet connection and try again."
-    exit 1
+check_cursor_installation() {
+  local installed_file
+  installed_file=$(ls -1t $APPIMAGE_PATTERN 2>/dev/null | head -n 1 || true)
+
+  if [[ -n "$installed_file" ]]; then
+    local installed_version
+    installed_version=$(extract_version "$(basename "$installed_file")")
+    logg info "Cursor is already installed (version: $installed_version)"
+    echo "$installed_version"
+  else
+    logg info "Cursor is not installed on this system"
+    echo ""
+  fi
+}
+
+# -------------------------------------------------------------------
+# Function to compare versions and determine if update is needed
+# -------------------------------------------------------------------
+check_for_updates() {
+  local installed_version="$1"
+
+  logg prompt "Checking for updates from cursor-ai-downloads repository..."
+
+  local latest_version
+  latest_version=$(get_latest_stable_version)
+  if [[ $? -ne 0 ]]; then
+    logg error "Could not fetch latest version information."
+    return 1
+  fi
+
+  logg info "Latest available version: $latest_version"
+
+  if [[ -n "$installed_version" ]]; then
+    if [[ "$installed_version" == "$latest_version" ]]; then
+      logg success "You already have the latest version ($latest_version) installed!"
+      return 2  # No update needed
+    else
+      logg info "Update available: $installed_version → $latest_version"
+      echo "$latest_version"
+      return 0  # Update available
+    fi
+  else
+    logg info "Cursor is not installed. Latest version available: $latest_version"
+    echo "$latest_version"
+    return 0  # Installation needed
+  fi
+}
+
+# -------------------------------------------------------------------
+# Function to handle the download decision
+# -------------------------------------------------------------------
+handle_download_decision() {
+  local latest_version="$1"
+  local installed_version="$2"
+
+  local action
+  if [[ -z "$installed_version" ]]; then
+    action="install Cursor $latest_version"
+  else
+    action="update from $installed_version to $latest_version"
+  fi
+
+  if confirm_action "Do you want to $action?"; then
+    logg info "Downloading Cursor $latest_version..."
+    if ! download_latest_stable; then
+      logg error "Failed to download Cursor $latest_version. Please check your internet connection and try again."
+      return 1
+    fi
+    logg success "Download completed successfully!"
+    return 0
+  else
+    logg info "Download cancelled by user."
+    return 2
   fi
 }
 
@@ -475,7 +531,6 @@ main() {
   clear
   validate_os
   install_script_alias
-  initialize_script
   show_message "Starting up..."
   menu
 }

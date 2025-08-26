@@ -2,13 +2,17 @@
 
 ## [2.0.0] - 2025-08-26
 ### 🚀 Major Changes
-- **Completely Automated Installation**: Removed manual Stable/Nightly mode selection
-- **Automatic Version Detection**: Script now fetches latest version from cursor-ai-downloads repository
+- **Intelligent Installation Flow**: Completely redesigned to check before download
+- **No Unnecessary Downloads**: Script only downloads when update is needed
+- **Smart Version Comparison**: Compares installed vs latest version before any action
+- **User-Controlled Downloads**: Always asks before downloading large files
 - **Unified Installation Mode**: Single, streamlined installation process
 - **Enhanced Error Handling**: Robust handling of file busy errors and process management
 
 ### 🔧 Technical Improvements
-- **Simplified Architecture**: Reduced code complexity (481 → 441 lines)
+- **New Intelligent Functions**: Added `check_cursor_installation()`, `check_for_updates()`, `handle_download_decision()`
+- **Flow Optimization**: Redesigned main flow to be check-first, download-second
+- **Simplified Architecture**: Reduced code complexity (481 → 485 lines with new features)
 - **Intelligent Process Detection**: Uses `lsof` to detect file usage before replacement
 - **Automatic Backup System**: Creates timestamped backups before file replacement
 - **Improved Logging**: Better user feedback and error messages
