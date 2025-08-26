@@ -105,10 +105,32 @@ detect_architecture() {
 # Get latest stable version from cursor-ai-downloads repository
 # -------------------------------------------------------------------
 get_latest_stable_version() {
-  local repo_content
-  repo_content=$(curl -s --max-time 10 \
+  # Use a much shorter timeout to avoid hanging
+  local ping_timeout=2
+  local curl_timeout=3
+
+  # Check internet connectivity with short timeout
+  if ! ping -c 1 -W $ping_timeout github.com >/dev/null 2>&1; then
+    return 1
+  fi
+
+  # Try to fetch repository content with very short timeouts
+  local repo_content=""
+  local urls=(
+    "https://raw.githubusercontent.com/oslook/cursor-ai-downloads/main/README.md"
+    "https://cdn.jsdelivr.net/gh/oslook/cursor-ai-downloads@main/README.md"
+  )
+
+  for url in "${urls[@]}"; do
+    # Use curl with very short timeout and simple options
+    if repo_content=$(curl -s --max-time $curl_timeout \
     -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
-    https://raw.githubusercontent.com/oslook/cursor-ai-downloads/main/README.md)
+      "$url" 2>/dev/null); then
+      if [[ -n "$repo_content" ]]; then
+        break
+      fi
+    fi
+  done
 
   if [[ -z "$repo_content" ]]; then
     return 1
@@ -370,27 +392,44 @@ check_version() {
   fi
 
   # Check for updates
+  logg prompt "Checking for updates from cursor-ai-downloads repository..."
   local latest_version
   latest_version=$(check_for_updates "$installed_version")
   local update_status=$?
 
   case $update_status in
     0)  # Update available or installation needed
+      if [[ -z "$latest_version" ]]; then
+        logg error "Could not determine latest version. Please check your internet connection."
+        logg info "You can try again later or check the repository manually:"
+        logg info "https://github.com/oslook/cursor-ai-downloads"
+      return 1
+      fi
+
+      logg info "Latest available version: $latest_version"
+
       if handle_download_decision "$latest_version" "$installed_version"; then
         # Download was successful, now install
         if [[ -f "$LOCAL_APPIMAGE_PATH" ]]; then
           install_appimage "$LOCAL_APPIMAGE_PATH"
         else
           logg error "Download completed but AppImage file not found."
-          return 1
+      return 1
         fi
       fi
       ;;
     1)  # Error checking for updates
-      logg error "Could not check for updates. Please try again later."
+      logg error "Could not check for updates. Please check your internet connection."
+      logg info "Possible solutions:"
+      logg info "1. Check your internet connection"
+      logg info "2. Try again in a few minutes"
+      logg info "3. Check the repository manually: https://github.com/oslook/cursor-ai-downloads"
       ;;
     2)  # No update needed
       logg success "Your Cursor installation is up to date!"
+      ;;
+    *)  # Unknown status
+      logg error "Unknown update status: $update_status"
       ;;
   esac
 }
@@ -476,17 +515,11 @@ check_cursor_installation() {
 check_for_updates() {
   local installed_version="$1"
 
-  logg prompt "Checking for updates from cursor-ai-downloads repository..."
-
   local latest_version
   latest_version=$(get_latest_stable_version)
   if [[ $? -ne 0 ]]; then
-    logg error "Could not fetch latest version information."
     return 1
   fi
-
-  # Return version and status without additional logging
-  # (logging will be handled by caller for cleaner output)
 
   if [[ -n "$installed_version" ]]; then
     if [[ "$installed_version" == "$latest_version" ]]; then
