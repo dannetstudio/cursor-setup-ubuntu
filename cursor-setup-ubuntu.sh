@@ -391,11 +391,39 @@ check_version() {
     logg info "Cursor is not installed on this system"
   fi
 
-  # Check for updates
+  # Check for updates with timeout protection
   logg prompt "Checking for updates from cursor-ai-downloads repository..."
-  local latest_version
-  latest_version=$(check_for_updates "$installed_version")
-  local update_status=$?
+  local latest_version=""
+  local update_status=1
+
+  # Use timeout to prevent hanging
+  if latest_version=$(timeout 8 bash -c "check_for_updates '$installed_version'" 2>/dev/null); then
+    update_status=$?
+  else
+    logg warn "Automatic version check timed out"
+    update_status=1
+  fi
+
+  # If automatic check failed, offer manual input
+  if [[ $update_status -ne 0 ]] || [[ -z "$latest_version" ]]; then
+    logg warn "Automatic version check failed. You can:"
+    echo "1. Check the repository manually: https://github.com/oslook/cursor-ai-downloads"
+    echo "2. Enter the latest version manually (e.g., 1.5.6)"
+    echo "3. Skip the update check for now"
+
+    read -rp "Enter latest version or press Enter to skip: " manual_version
+    if [[ -n "$manual_version" ]] && [[ "$manual_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      latest_version="$manual_version"
+      update_status=0
+      logg info "Using manual version: $latest_version"
+    elif [[ -z "$manual_version" ]]; then
+      logg info "Skipping update check"
+      return 0
+    else
+      logg error "Invalid version format. Skipping update check."
+      return 0
+    fi
+  fi
 
   case $update_status in
     0)  # Update available or installation needed
