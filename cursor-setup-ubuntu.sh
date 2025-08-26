@@ -137,14 +137,14 @@ download_latest_stable() {
   if [[ $? -ne 0 ]]; then
     return 1
   fi
-
+  
   local latest_version
   latest_version=$(get_latest_stable_version)
   if [[ $? -ne 0 ]]; then
     logg error "Could not fetch repository content."
     return 1
   fi
-
+  
   local filename="Cursor-$latest_version"
   if [[ "$arch" == "x64" ]]; then
     filename="${filename}-x86_64.AppImage"
@@ -157,9 +157,9 @@ download_latest_stable() {
   logg info "Latest stable version: $latest_version"
   logg info "Downloading file: $filename"
   logg info "Download URL: $url"
-
+  
   pushd "$USER_DOWNLOADS_DIR" >/dev/null
-
+  
   if [[ -f "$filename" ]]; then
     logg info "File $filename already exists. Removing old version..."
     rm -f "$filename"
@@ -172,9 +172,9 @@ download_latest_stable() {
     logg error "Failed to download the stable file."
     return 1
   fi
-
+  
   popd >/dev/null
-
+  
   # Update global variable to point to the downloaded file
   LOCAL_APPIMAGE_PATH="$USER_DOWNLOADS_DIR/$filename"
   logg success "Downloaded file: $LOCAL_APPIMAGE_PATH"
@@ -207,7 +207,7 @@ extract_version() {
   local filename="$1"
   if [[ "$filename" =~ Cursor-([0-9]+\.[0-9]+\.[0-9]+) ]]; then
     printf "%s" "${BASH_REMATCH[1]}"
-    return
+      return
   fi
   printf "unknown"
 }
@@ -335,7 +335,7 @@ install_appimage() {
   # Copy the new file
   if cp "$file" "$target_path"; then
     chmod +x "$target_path"
-    # Update global variable to point to the installed file
+  # Update global variable to point to the installed file
     LOCAL_APPIMAGE_PATH="$target_path"
     logg success "AppImage installed to $target_path"
 
@@ -343,9 +343,9 @@ install_appimage() {
     remove_old_versions
 
     # Update system integration
-    update_desktop_shortcut
-    update_apparmor_profile
-    update_executable_symlink
+  update_desktop_shortcut
+  update_apparmor_profile
+  update_executable_symlink
 
     logg success "Installation completed successfully!"
   else
@@ -361,6 +361,13 @@ check_version() {
   # Check current installation status
   local installed_version
   installed_version=$(check_cursor_installation)
+
+  # Log installation status
+  if [[ -n "$installed_version" ]]; then
+    logg info "Cursor is already installed (version: $installed_version)"
+  else
+    logg info "Cursor is not installed on this system"
+  fi
 
   # Check for updates
   local latest_version
@@ -455,10 +462,10 @@ check_cursor_installation() {
   if [[ -n "$installed_file" ]]; then
     local installed_version
     installed_version=$(extract_version "$(basename "$installed_file")")
-    logg info "Cursor is already installed (version: $installed_version)"
+    # Return version without logging (logging will be done by caller)
     echo "$installed_version"
   else
-    logg info "Cursor is not installed on this system"
+    # Return empty string for not installed
     echo ""
   fi
 }
@@ -478,19 +485,17 @@ check_for_updates() {
     return 1
   fi
 
-  logg info "Latest available version: $latest_version"
+  # Return version and status without additional logging
+  # (logging will be handled by caller for cleaner output)
 
   if [[ -n "$installed_version" ]]; then
     if [[ "$installed_version" == "$latest_version" ]]; then
-      logg success "You already have the latest version ($latest_version) installed!"
       return 2  # No update needed
     else
-      logg info "Update available: $installed_version → $latest_version"
       echo "$latest_version"
       return 0  # Update available
     fi
   else
-    logg info "Cursor is not installed. Latest version available: $latest_version"
     echo "$latest_version"
     return 0  # Installation needed
   fi
@@ -503,14 +508,23 @@ handle_download_decision() {
   local latest_version="$1"
   local installed_version="$2"
 
-  local action
+  # Build action message
+  local action_message
   if [[ -z "$installed_version" ]]; then
-    action="install Cursor $latest_version"
+    action_message="install Cursor $latest_version"
   else
-    action="update from $installed_version to $latest_version"
+    action_message="update from $installed_version to $latest_version"
   fi
 
-  if confirm_action "Do you want to $action?"; then
+  # Show current status clearly
+  if [[ -n "$installed_version" ]]; then
+    logg info "Update available: $installed_version → $latest_version"
+  else
+    logg info "Latest version available: $latest_version"
+  fi
+
+  # Ask for confirmation
+  if confirm_action "Do you want to $action_message"; then
     logg info "Downloading Cursor $latest_version..."
     if ! download_latest_stable; then
       logg error "Failed to download Cursor $latest_version. Please check your internet connection and try again."

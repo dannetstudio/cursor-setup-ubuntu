@@ -17,6 +17,8 @@
 - **Automatic Backup System**: Creates timestamped backups before file replacement
 - **Improved Logging**: Better user feedback and error messages
 - **Optimized Functions**: Streamlined code with centralized constants
+- **Clean Message Flow**: Eliminated duplicate and confusing messages
+- **Better User Experience**: Clear status messages and decision prompts
 
 ### 🐛 Bug Fixes
 - **File Busy Error**: Fixed "file is busy" errors during updates
