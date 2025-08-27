@@ -395,11 +395,14 @@ check_version() {
   logg prompt "Checking for updates from cursor-ai-downloads repository..."
   local latest_version=""
   local update_status=1
-  latest_version=$(check_for_updates "$installed_version" || true)
-  update_status=$?
+  if latest_version=$(check_for_updates "$installed_version"); then
+    update_status=$?
+  else
+    update_status=$?
+  fi
 
   # If automatic check failed, offer manual input
-  if [[ $update_status -ne 0 ]] || [[ -z "$latest_version" ]]; then
+  if [[ $update_status -eq 1 ]] || [[ -z "$latest_version" ]]; then
     logg warn "Automatic version check failed. Options:"
     echo "1) Check repository: https://github.com/oslook/cursor-ai-downloads"
     echo "2) Enter latest version manually (e.g., 1.5.6)"
@@ -438,9 +441,12 @@ check_version() {
           logg error "Download completed but AppImage file not found."
       return 1
         fi
-      fi
-      ;;
-    1)  # Error checking for updates
+       fi
+       ;;
+     2)  # No update needed
+       logg success "Your Cursor installation is up to date!"
+       ;;
+     1)  # Error checking for updates
       logg error "Could not check for updates. Please check your internet connection."
       logg info "Possible solutions:"
       logg info "1. Check your internet connection"
@@ -539,12 +545,15 @@ check_for_updates() {
 
   local latest_version
   latest_version=$(get_latest_stable_version)
-  if [[ $? -ne 0 ]]; then
+  local exit_code=$?
+
+  if [[ $exit_code -ne 0 ]] || [[ -z "$latest_version" ]]; then
     return 1
   fi
 
   if [[ -n "$installed_version" ]]; then
     if [[ "$installed_version" == "$latest_version" ]]; then
+      echo "$latest_version"
       return 2  # No update needed
     else
       echo "$latest_version"
@@ -573,7 +582,12 @@ handle_download_decision() {
 
   # Show current status clearly
   if [[ -n "$installed_version" ]]; then
-    logg info "Update available: $installed_version → $latest_version"
+    if [[ "$installed_version" == "$latest_version" ]]; then
+      logg success "You already have the latest version ($latest_version) installed!"
+      return 0
+    else
+      logg info "Update available: $installed_version → $latest_version"
+    fi
   else
     logg info "Latest version available: $latest_version"
   fi

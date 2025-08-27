@@ -19,6 +19,8 @@
 - **Optimized Functions**: Streamlined code with centralized constants
 - **Clean Message Flow**: Eliminated duplicate and confusing messages
 - **Better User Experience**: Clear status messages and decision prompts
+- **Robust Network Handling**: Added timeout controls and fallback URLs for better connectivity
+- **Enhanced Error Messages**: Clear instructions when network issues occur
 
 ### 🐛 Bug Fixes
 - **File Busy Error**: Fixed "file is busy" errors during updates
