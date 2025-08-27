@@ -1,5 +1,43 @@
 # 📋 Changelog - Cursor Setup Ubuntu
 
+## [2.1.0] - 2025-08-27
+### 🚀 Major Changes
+- **Automatic Language Detection**: Intelligent detection of system language (English/Spanish)
+- **Enhanced User Experience**: New menu option to display system information
+- **Robust Version Comparison**: Fixed critical bugs in version comparison logic
+- **Improved Process Management**: Enhanced detection and handling of running processes
+- **Flexible Configuration**: Environment variable support for all settings
+
+### 🔧 Technical Improvements
+- **Smart Language Detection**: Auto-detects language from environment variables, directories, and system settings
+- **Clean Function Outputs**: Eliminated log pollution in function return values
+- **Enhanced Logging System**: Colored output, timestamps, and configurable debug levels
+- **System Requirements Validation**: Comprehensive dependency and environment checking
+- **Improved Error Handling**: Better timeout management and user feedback
+- **Modular Architecture**: Cleaner separation of concerns and reusable functions
+
+### 🐛 Critical Bug Fixes
+- **Version Comparison Logic**: Fixed false positive update detection when versions are equal
+- **Function Output Contamination**: Resolved messages appearing in function return values
+- **Menu Option Handling**: Corrected menu flow and option validation
+- **Process Detection**: Enhanced reliability for file busy scenarios
+- **Language Fallback**: Improved default language detection and fallback mechanisms
+
+### 📖 Documentation Updates
+- **Configuration Section**: Added comprehensive environment variable documentation
+- **Language Support**: Detailed explanation of auto-detection methods
+- **Troubleshooting Guide**: Enhanced with new examples and solutions
+- **Version Detection Process**: Clarified two-step process (metadata from GitHub, download from official servers)
+
+### 🎯 New Features
+- **System Information Display**: New menu option showing detected settings and versions
+- **Configurable Timeouts**: Environment variables for all timeout settings
+- **Debug Mode Support**: Enhanced debugging capabilities with `DEBUG_MODE`
+- **Color Output Control**: `LOG_COLORS` variable for terminal compatibility
+- **Custom URLs**: Support for overriding repository and download URLs
+
+---
+
 ## [2.0.0] - 2025-08-26
 ### 🚀 Major Changes
 - **Intelligent Installation Flow**: Completely redesigned to check before download

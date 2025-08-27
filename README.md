@@ -1,6 +1,17 @@
 # 🚀 Cursor Setup Ubuntu
 
+**Version 2.1.0** - Enhanced Edition with Automatic Language Detection
+
 This repository contains the bash script **cursor-setup-ubuntu**, inspired by the [cursor-setup-wizard](https://github.com/jorcelinojunior/cursor-setup-wizard) repository. This script automatically downloads and installs the latest version of the **Cursor AI AppImage** on Ubuntu and its derivatives. **Cursor AI** is a powerful AI-assisted code editor, available at [cursor.com](https://www.cursor.com).
+
+## 🎉 What's New in v2.1.0
+
+- **🌍 Automatic Language Detection**: Smart detection of system language (English/Spanish)
+- **🔧 Enhanced Configuration**: Extensive environment variable support
+- **🐛 Critical Bug Fixes**: Fixed version comparison and process handling
+- **📊 System Information**: New menu option to display detected settings
+- **🎨 Improved Logging**: Colored output with timestamps and debug levels
+- **⚡ Better Performance**: Optimized functions and cleaner code architecture
 
 ## 🔧 About This Script
 
@@ -13,7 +24,10 @@ The **cursor-setup-ubuntu** script automates the installation, updating, and man
 - **Desktop Integration**: Creates or updates a desktop shortcut with an application icon.
 - **Executable Symlink Creation**: Allows launching Cursor AI from the terminal.
 - **AppArmor Profile Management**: Ensures proper execution security.
-- **Language Customization**: Supports English (`EN`) and Spanish (`ES`) for defining download and desktop directory locations.
+- **Automatic Language Detection**: Intelligently detects system language (English/Spanish) from environment variables, directories, and system settings.
+- **System Information Display**: Shows detected language, directories, and current installation status.
+- **Enhanced Process Management**: Smart detection and handling of running Cursor processes during updates.
+- **Flexible Configuration**: Extensive environment variable support for customization.
 
 ---
 
@@ -63,18 +77,54 @@ The script recognizes and handles Cursor versions in the format: `Cursor-X.Y.Z`
 - **GitHub CDN**: Downloads use GitHub's secure content delivery network
 - **Transparent Process**: You can manually verify the download URLs before installation
 
+#### How Version Detection & Download Works
+
+The script uses a **two-step process** for security and reliability:
+
+1. **Version Detection** (from GitHub repository):
+   - Fetches version information from `cursor-ai-downloads` repository
+   - Extracts the latest version number from the repository's README
+   - **No downloads** happen from this repository - only metadata
+
+2. **Actual Download** (from official Cursor servers):
+   - Uses the version info to construct official download URLs
+   - Downloads directly from `downloads.cursor.com` (official CDN)
+   - Validates file integrity after download
+
+**Example Process:**
+```
+1. Check https://github.com/oslook/cursor-ai-downloads → Finds version 1.5.6
+2. Download from https://downloads.cursor.com/production/.../Cursor-1.5.6-x86_64.AppImage
+```
+
 **Manual Verification**: You can visit the [cursor-ai-downloads repository](https://github.com/oslook/cursor-ai-downloads) to see the latest available versions and verify the download URLs that the script will use.
 
 ### Language Support
 
-You can define the language to determine where the script will store and manage files. Set `LANG_SETTING` to `EN` for English or `ES` for Spanish. Depending on the chosen language, download and desktop directories will be assigned accordingly:
+The script now **automatically detects** your system language using multiple methods:
 
+#### Auto-Detection Methods (in order of priority):
+1. **Environment Variables**: `LANG` and `LANGUAGE` variables
+2. **Directory Existence**: Checks for `~/Escritorio` or `~/Desktop`
+3. **System Locale**: Uses `locale` command output
+4. **GNOME/KDE Settings**: Reads `~/.config/user-dirs.dirs`
+
+#### Directory Mapping:
 - **English (EN):**
   - Downloads folder: `~/Downloads`
   - Desktop folder: `~/Desktop`
 - **Spanish (ES):**
   - Downloads folder: `~/Descargas`
   - Desktop folder: `~/Escritorio`
+
+#### Manual Override:
+You can override auto-detection by setting the `LANG_SETTING` environment variable:
+```bash
+LANG_SETTING=EN ./cursor-setup-ubuntu.sh  # Force English
+LANG_SETTING=ES ./cursor-setup-ubuntu.sh  # Force Spanish
+```
+
+The script will show which language was detected during the system requirements check.
 
 ---
 
@@ -103,7 +153,7 @@ chmod +x cursor-setup-ubuntu.sh
 
 ### Run the Script
 
-The script is ready to use with English language settings by default. If you prefer Spanish, you can optionally modify the `LANG_SETTING` variable in the script.
+The script automatically detects your system language (English/Spanish) and configures directories accordingly. You can override auto-detection by setting the `LANG_SETTING` environment variable if needed.
 
 Execute the script:
 
@@ -128,7 +178,8 @@ You will be presented with a text-based menu offering the following options:
 
 1. **Check for Updates & Install/Update Cursor** - Intelligently checks your current installation, compares with the latest version, and only downloads/installs if necessary
 2. **Update Desktop Shortcut** - Creates or updates the desktop shortcut and icon (useful if you manually moved the AppImage)
-3. **Exit** - Exit the script
+3. **Show System Information** - Displays detected language, directories, and system settings
+4. **Exit** - Exit the script
 
 ---
 
@@ -183,6 +234,38 @@ When updating Cursor, the script intelligently handles situations where the AppI
 **Note**: If running the script from within Cursor, it will detect that the AppImage is in use and offer to terminate the process. This is normal behavior and ensures safe updates.
 
 ---
+
+## 🔧 Configuration
+
+The script supports various environment variables for customization:
+
+### Language Settings
+```bash
+LANG_SETTING=ES              # Force Spanish (ES) or English (EN)
+                             # If not set, auto-detection is used
+```
+
+### Logging & Debug
+```bash
+LOG_COLORS=true             # Enable/disable colored output
+DEBUG_MODE=false            # Enable debug logging
+```
+
+### Timeouts & Performance
+```bash
+MENU_TIMEOUT=300            # Menu timeout in seconds (default: 300)
+CONFIRMATION_TIMEOUT=60     # Confirmation prompt timeout (default: 60)
+DOWNLOAD_TIMEOUT=300        # Download timeout (default: 300)
+CURL_TIMEOUT=5              # Repository query timeout (default: 5)
+CURL_PING_TIMEOUT=2         # Connectivity test timeout (default: 2)
+MAX_RETRY_ATTEMPTS=3        # Maximum retry attempts (default: 3)
+```
+
+### Custom URLs (Advanced)
+```bash
+CURSOR_REPO_URL="https://..."                    # Override repository URL
+CURSOR_DOWNLOAD_BASE_URL="https://..."           # Override download base URL
+```
 
 ## 🛠️ Requirements
 
