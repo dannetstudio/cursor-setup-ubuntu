@@ -1,5 +1,28 @@
 # 📋 Changelog - Cursor Setup Ubuntu
 
+## [2.1.1] - 2025-08-27
+### 🔒 Critical Security & Stability Fixes
+- **Fixed "target is empty" wrapper script bug**: Resolved GitHub issue #1 that caused wrapper script generation failures
+- **Eliminated unsafe variable expansion**: Fixed potential security vulnerabilities from unquoted variable usage
+- **Replaced dangerous eval usage**: Removed eval statements with safer alternatives for command execution
+- **Added security validation**: Comprehensive validation for wrapper script generation and file operations
+- **Enhanced input validation**: Robust version checking with proper format validation and error handling
+
+### 🛡️ Code Quality & Safety Improvements
+- **Standardized exit codes**: Implemented named constants (SUCCESS=0, ERROR=1, etc.) for consistent error handling
+- **Improved atomic operations**: Enhanced backup operations to prevent data loss during updates
+- **Optimized process detection**: More efficient detection of running Cursor processes with better error handling
+- **Extracted magic numbers**: Replaced hardcoded values with named configuration constants for maintainability
+- **Standardized error messages**: Consistent error message formatting across all functions
+
+### 🔧 Technical Enhancements
+- **Enhanced security validation**: Added comprehensive checks for file permissions and directory access
+- **Improved error recovery**: Better handling of failed operations with proper cleanup and rollback
+- **Optimized performance**: Reduced system calls and improved efficiency of core operations
+- **Better logging consistency**: Standardized log message formats and error reporting
+
+---
+
 ## [2.1.0] - 2025-08-27
 ### 🚀 Major Changes
 - **Automatic Language Detection**: Intelligent detection of system language (English/Spanish)

@@ -1,14 +1,22 @@
 # 🚀 Cursor Setup Ubuntu
 
-**Version 2.1.0** - Enhanced Edition with Automatic Language Detection
+**Version 2.1.1** - Security & Stability Edition with Critical Fixes
 
 This repository contains the bash script **cursor-setup-ubuntu**, inspired by the [cursor-setup-wizard](https://github.com/jorcelinojunior/cursor-setup-wizard) repository. This script automatically downloads and installs the latest version of the **Cursor AI AppImage** on Ubuntu and its derivatives. **Cursor AI** is a powerful AI-assisted code editor, available at [cursor.com](https://www.cursor.com).
 
-## 🎉 What's New in v2.1.0
+## 🎉 What's New in v2.1.1
+
+- **🔒 Critical Security Fixes**: Fixed unsafe variable expansion and dangerous eval usage
+- **🛡️ Enhanced Input Validation**: Comprehensive version checking and security validation
+- **🐛 Critical Bug Fixes**: Fixed "target is empty" wrapper script bug (GitHub issue #1)
+- **📋 Standardized Exit Codes**: Named constants for better error handling
+- **⚡ Optimized Performance**: Improved process detection and atomic operations
+- **🔧 Code Quality**: Extracted magic numbers to named configuration constants
+
+## 🎉 Previous Features (v2.1.0)
 
 - **🌍 Automatic Language Detection**: Smart detection of system language (English/Spanish)
 - **🔧 Enhanced Configuration**: Extensive environment variable support
-- **🐛 Critical Bug Fixes**: Fixed version comparison and process handling
 - **📊 System Information**: New menu option to display detected settings
 - **🎨 Improved Logging**: Colored output with timestamps and debug levels
 - **⚡ Better Performance**: Optimized functions and cleaner code architecture

@@ -15,7 +15,7 @@
 # - System requirements validation
 #
 # Author: Daniel Ignacio Fernández
-# Version: 2.1.0 - Enhanced Edition with Automatic Language Detection
+# Version: 2.1.1 - Security & Stability Edition with Critical Fixes
 #
 # CRITICAL IMPROVEMENTS IN v2.1.0:
 # - Fixed version comparison logic (no more false update detection)
