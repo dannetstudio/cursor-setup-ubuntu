@@ -27,6 +27,23 @@
 set -euo pipefail
 
 # -------------------------------------------------------------------
+# Standard Exit Codes
+# -------------------------------------------------------------------
+readonly EXIT_SUCCESS=0
+readonly EXIT_ERROR=1
+readonly EXIT_NO_ACTION=2
+readonly EXIT_USER_CANCEL=3
+
+# -------------------------------------------------------------------
+# Configuration Constants
+# -------------------------------------------------------------------
+readonly MIN_APPIMAGE_SIZE=104857600  # 100MB minimum size for AppImage validation
+readonly MAX_WAIT_ATTEMPTS=12         # Maximum wait attempts for process termination (2 minutes with 10s intervals)
+readonly WAIT_INTERVAL=10             # Wait interval in seconds between process checks
+readonly MENU_CHOICE_TIMEOUT=30       # Timeout for menu choice selection
+readonly DEFAULT_CONFIRMATION_TIMEOUT=60  # Default confirmation timeout
+
+# -------------------------------------------------------------------
 # Use the real user's home directory even when running with sudo
 # -------------------------------------------------------------------
 if [ -n "${SUDO_USER:-}" ]; then
@@ -230,13 +247,13 @@ show_message() {
 # -------------------------------------------------------------------
 remove_old_versions() {
   local newest_file
-  newest_file=$(ls -1t $APPIMAGE_PATTERN 2>/dev/null | head -n 1 || true)
+  newest_file=$(ls -1t "$APPIMAGE_PATTERN" 2>/dev/null | head -n 1 || true)
   if [[ -n "$newest_file" ]]; then
     local older_files
-    older_files=$(ls -1t $APPIMAGE_PATTERN 2>/dev/null | tail -n +2 || true)
+    older_files=$(ls -1t "$APPIMAGE_PATTERN" 2>/dev/null | tail -n +2 || true)
     if [[ -n "$older_files" ]]; then
       logg info "Removing older versions in $DOWNLOAD_DIR..."
-      rm -f $older_files
+      rm -f "$older_files"
     fi
   fi
 }
@@ -247,7 +264,7 @@ remove_old_versions() {
 # -------------------------------------------------------------------
 confirm_action() {
   local question="$1"
-  local timeout="${2:-60}"  # Default timeout 60 seconds
+  local timeout="${2:-$DEFAULT_CONFIRMATION_TIMEOUT}"
   local default="${3:-N}"   # Default answer (Y/N)
   local attempts=0
   local max_attempts=3
@@ -395,7 +412,7 @@ download_latest_stable() {
   local latest_version
   latest_version=$(get_latest_stable_version)
   if [[ $? -ne 0 ]]; then
-    logg error "Could not fetch repository content."
+    logg error "Could not fetch repository content"
     return 1
   fi
 
@@ -423,20 +440,20 @@ download_latest_stable() {
   if ! curl -L -o "$filename" -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
        --progress-bar --retry 3 --retry-delay 2 "$url"; then
     popd >/dev/null
-    logg error "Failed to download the stable file after 3 attempts."
+    logg error "Failed to download the stable file after 3 attempts"
     return 1
   fi
 
   if [[ ! -f "$filename" ]]; then
     popd >/dev/null
-    logg error "Failed to download the stable file."
+    logg error "Failed to download the stable file"
     return 1
   fi
 
   # Validate downloaded file
   if ! validate_appimage "$filename"; then
     popd >/dev/null
-    logg error "Downloaded file validation failed."
+    logg error "Downloaded file validation failed"
     rm -f "$filename"
     return 1
   fi
@@ -518,8 +535,8 @@ validate_appimage() {
   # Check file size (AppImages are typically > 100MB)
   local file_size
   file_size=$(stat -f%z "$file_path" 2>/dev/null || stat -c%s "$file_path" 2>/dev/null)
-  if [[ $file_size -lt 104857600 ]]; then  # 100MB
-    logg error "AppImage file seems too small ($file_size bytes). Download may be corrupted."
+  if [[ $file_size -lt $MIN_APPIMAGE_SIZE ]]; then
+    logg error "AppImage file seems too small ($file_size bytes). Download may be corrupted"
     return 1
   fi
 
@@ -602,20 +619,51 @@ extract_version() {
 # It creates a wrapper script that launches the AppImage with "--no-sandbox".
 # -------------------------------------------------------------------
 update_executable_symlink() {
-  local target="$DOWNLOAD_DIR/$(basename "$LOCAL_APPIMAGE_PATH")"
+  local target_appimage="$DOWNLOAD_DIR/$(basename "$LOCAL_APPIMAGE_PATH")"
   local wrapper="$DOWNLOAD_DIR/wrapper-${CLI_COMMAND_NAME}.sh"
   local link="/usr/local/bin/${CLI_COMMAND_NAME}"
-   logg info "Creating wrapper script: $wrapper"
-   cat > "$wrapper" <<EOF
+  
+  # Security: Validate target exists and is executable
+  if [[ ! -f "$target_appimage" ]]; then
+    logg error "Target AppImage not found: $target_appimage"
+    return $EXIT_ERROR
+  fi
+  
+  if [[ ! -x "$target_appimage" ]]; then
+    logg error "Target AppImage is not executable: $target_appimage"
+    return $EXIT_ERROR
+  fi
+  
+  # Security: Validate target path doesn't contain dangerous characters
+  local basename_target="$(basename "$LOCAL_APPIMAGE_PATH")"
+  if [[ "$basename_target" =~ [^a-zA-Z0-9._-] ]]; then
+    logg error "Invalid characters in AppImage filename: $basename_target"
+    return $EXIT_ERROR
+  fi
+  
+  logg info "Creating wrapper script: $wrapper"
+  
+  # Fix: Hardcode the target path in the generated script instead of using variable expansion
+  cat > "$wrapper" <<EOF
 #!/usr/bin/env bash
-# Wrapper to launch the AppImage with --no-sandbox
-if [ -z "$target" ]; then
-  echo "Error: target is empty."
+# Wrapper to launch the Cursor AppImage with --no-sandbox
+# Generated on $(date) by cursor-setup-ubuntu.sh
+readonly TARGET_APPIMAGE="$target_appimage"
+
+if [[ ! -f "\$TARGET_APPIMAGE" ]]; then
+  echo "Error: AppImage not found: \$TARGET_APPIMAGE" >&2
   exit 1
 fi
-echo "Launching AppImage: $target"
-"$target" --no-sandbox "\$@"
+
+if [[ ! -x "\$TARGET_APPIMAGE" ]]; then
+  echo "Error: AppImage is not executable: \$TARGET_APPIMAGE" >&2
+  exit 1
+fi
+
+echo "Launching Cursor AppImage: \$TARGET_APPIMAGE"
+exec "\$TARGET_APPIMAGE" --no-sandbox "\$@"
 EOF
+
   chmod +x "$wrapper"
   logg info "Updating executable symlink: $link -> $wrapper"
   if sudo test -L "$link" || sudo test -f "$link"; then
@@ -656,7 +704,7 @@ EOF
 update_apparmor_profile() {
   logg info "Updating AppArmor profile..."
   if ! sudo -v; then
-    logg error "Sudo privileges are required to update the AppArmor profile."
+    logg error "Sudo privileges are required to update the AppArmor profile"
     return 1
   fi
   local APPARMOR_PROFILE_CONTENT="
@@ -701,39 +749,48 @@ install_appimage() {
   if [[ -f "$target_path" ]]; then
     logg info "Target file exists, checking if it's in use..."
 
-    # Enhanced process detection using multiple methods
+    # Optimized process detection using the most efficient method available
     local pids_using_file=""
     local processes_info=""
+    local detection_method=""
 
-    # Method 1: Using lsof (most reliable)
+    # Method 1: Using lsof (most reliable and efficient)
     if command -v lsof >/dev/null 2>&1; then
-      pids_using_file=$(lsof "$target_path" 2>/dev/null | awk 'NR>1 {print $2}' | sort -u || true)
-      if [[ -n "$pids_using_file" ]]; then
-        processes_info=$(lsof "$target_path" 2>/dev/null | awk 'NR>1 {print $2, $1}' | sort -u || true)
+      local lsof_output
+      lsof_output=$(lsof "$target_path" 2>/dev/null || true)
+      if [[ -n "$lsof_output" ]]; then
+        pids_using_file=$(echo "$lsof_output" | awk 'NR>1 {print $2}' | sort -u)
+        processes_info=$(echo "$lsof_output" | awk 'NR>1 {print $2, $1}' | sort -u)
+        detection_method="lsof"
         logg debug "Processes using file (lsof): $processes_info"
       fi
     fi
 
-    # Method 2: Using fuser as fallback
+    # Method 2: Using fuser as fallback (only if lsof failed)
     if [[ -z "$pids_using_file" ]] && command -v fuser >/dev/null 2>&1; then
-      pids_using_file=$(fuser "$target_path" 2>/dev/null | sed 's/.*://' | tr ',' '\n' | sort -u || true)
-      if [[ -n "$pids_using_file" ]]; then
+      local fuser_pids
+      fuser_pids=$(fuser "$target_path" 2>/dev/null | sed 's/.*://' | tr ',' '\n' | tr -d '[:space:]' || true)
+      if [[ -n "$fuser_pids" ]]; then
+        pids_using_file="$fuser_pids"
         processes_info=$(fuser -v "$target_path" 2>/dev/null || true)
+        detection_method="fuser"
         logg debug "Processes using file (fuser): $processes_info"
       fi
     fi
 
-    # Method 3: Check for running cursor processes
-    local cursor_pids=""
-    cursor_pids=$(pgrep -f "cursor" 2>/dev/null || true)
-    if [[ -n "$cursor_pids" ]]; then
-      logg debug "Found running Cursor processes: $cursor_pids"
-      # Check if any of these processes are using our file
-      for pid in $cursor_pids; do
-        if [[ -n "$pids_using_file" ]] && echo "$pids_using_file" | grep -q "^$pid$"; then
-          logg warn "Cursor process $pid is using the AppImage file"
-        fi
-      done
+    # Method 3: Enhanced cursor process check (only if necessary)
+    if [[ -n "$pids_using_file" ]]; then
+      local cursor_pids
+      cursor_pids=$(pgrep -f "cursor" 2>/dev/null || true)
+      if [[ -n "$cursor_pids" ]]; then
+        logg debug "Found running Cursor processes: $cursor_pids"
+        # More efficient check using associative array concept
+        for pid in $cursor_pids; do
+          if echo "$pids_using_file" | grep -q "^$pid$"; then
+            logg warn "Cursor process $pid is using the AppImage file"
+          fi
+        done
+      fi
     fi
 
     if [[ -n "$pids_using_file" ]]; then
@@ -758,10 +815,10 @@ install_appimage() {
 
       local choice=""
       local wait_attempts=0
-      local max_wait_attempts=12  # 2 minutes with 10s intervals
+      local max_wait_attempts=$MAX_WAIT_ATTEMPTS
 
       while [[ -z "$choice" ]] || ! [[ "$choice" =~ ^[1-4]$ ]]; do
-        read -t 30 -rp "Choose option [1-4]: " choice
+        read -t $MENU_CHOICE_TIMEOUT -rp "Choose option [1-4]: " choice
         if [[ $? -ne 0 ]]; then
           logg warn "Timeout waiting for choice. Cancelling installation."
           return 1
@@ -771,9 +828,9 @@ install_appimage() {
           1)
             logg info "Waiting for processes to finish..."
             while [[ $wait_attempts -lt $max_wait_attempts ]] && [[ -n "$(lsof "$target_path" 2>/dev/null | awk 'NR>1 {print $2}' || true)" ]]; do
-              sleep 10
+              sleep $WAIT_INTERVAL
               wait_attempts=$((wait_attempts + 1))
-              logg debug "Still waiting... ($((wait_attempts * 10))s elapsed)"
+              logg debug "Still waiting... ($((wait_attempts * WAIT_INTERVAL))s elapsed)"
             done
 
             if [[ $wait_attempts -ge $max_wait_attempts ]]; then
@@ -812,19 +869,23 @@ install_appimage() {
       done
     fi
 
-    # Create backup with better naming
+    # Create backup with better naming (atomic operation)
     local timestamp
     timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_file="$target_path.backup.$timestamp"
+    local temp_backup="$backup_file.tmp"
     logg info "Creating backup: $backup_file"
 
-    if ! cp "$target_path" "$backup_file"; then
+    # Atomic backup: copy to temp file first, then move to final location
+    if cp "$target_path" "$temp_backup" && mv "$temp_backup" "$backup_file"; then
+      logg success "Backup created successfully"
+    else
       logg error "Failed to create backup file"
+      # Clean up temp file if it exists
+      [[ -f "$temp_backup" ]] && rm -f "$temp_backup"
       if ! confirm_action "Continue without backup?"; then
         return 1
       fi
-    else
-      logg success "Backup created successfully"
     fi
   fi
 
@@ -845,7 +906,7 @@ install_appimage() {
 
     logg success "Installation completed successfully!"
   else
-    logg error "Failed to install AppImage. You may need to close Cursor and try again."
+    logg error "Failed to install AppImage. You may need to close Cursor and try again"
     return 1
   fi
 }
@@ -879,23 +940,40 @@ check_version() {
     echo "3) Skip update check"
 
     read -rp "Enter latest version or press Enter to skip: " manual_version
-    if [[ -n "$manual_version" ]] && [[ "$manual_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    
+    # Enhanced input validation
+    if [[ -z "$manual_version" ]]; then
+      logg info "Skipping update check. Returning to menu."
+      return 0
+    elif [[ ! "$manual_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      logg error "Invalid version format. Expected format: X.Y.Z (e.g., 1.5.6)"
+      return 0
+    else
+      # Additional validation: check reasonable version ranges
+      local version_parts
+      IFS='.' read -ra version_parts <<< "$manual_version"
+      local major="${version_parts[0]}"
+      local minor="${version_parts[1]}"
+      local patch="${version_parts[2]}"
+      
+      # Sanity checks for version numbers (reasonable ranges)
+      if [[ $major -gt 100 ]] || [[ $minor -gt 999 ]] || [[ $patch -gt 999 ]]; then
+        logg error "Version numbers seem too high. Please verify: $manual_version"
+        if ! confirm_action "Use this version anyway"; then
+          return 0
+        fi
+      fi
+      
       latest_version="$manual_version"
       update_status=0
       logg info "Using manual version: $latest_version"
-    elif [[ -z "$manual_version" ]]; then
-      logg info "Skipping update check. Returning to menu."
-      return 0
-    else
-      logg error "Invalid version format. Returning to menu."
-      return 0
     fi
   fi
 
    case $update_status in
      0)  # Update available or installation needed
        if [[ -z "$latest_version" ]]; then
-         logg error "Could not determine latest version. Please check your internet connection."
+         logg error "Could not determine latest version. Please check your internet connection"
          logg info "You can try again later or check the repository manually:"
          logg info "https://github.com/oslook/cursor-ai-downloads"
        return 1
@@ -906,7 +984,7 @@ check_version() {
          if [[ -f "$LOCAL_APPIMAGE_PATH" ]]; then
            install_appimage "$LOCAL_APPIMAGE_PATH"
          else
-           logg error "Download completed but AppImage file not found."
+           logg error "Download completed but AppImage file not found"
        return 1
          fi
         fi
@@ -917,7 +995,7 @@ check_version() {
         if confirm_action "Do you want to reinstall anyway"; then
           logg info "Reinstalling Cursor $installed_version..."
           if ! download_latest_stable; then
-            logg error "Failed to download Cursor $latest_version. Please check your internet connection and try again."
+            logg error "Failed to download Cursor $latest_version. Please check your internet connection and try again"
             return 1
           fi
           logg success "Download completed successfully!"
@@ -925,7 +1003,7 @@ check_version() {
           if [[ -f "$LOCAL_APPIMAGE_PATH" ]]; then
             install_appimage "$LOCAL_APPIMAGE_PATH"
           else
-            logg error "Download completed but AppImage file not found."
+            logg error "Download completed but AppImage file not found"
             return 1
           fi
         else
@@ -933,7 +1011,7 @@ check_version() {
         fi
         ;;
       1)  # Error checking for updates
-       logg error "Could not check for updates. Please check your internet connection."
+       logg error "Could not check for updates. Please check your internet connection"
        logg info "Possible solutions:"
        logg info "1. Check your internet connection"
        logg info "2. Try again in a few minutes"
@@ -955,8 +1033,8 @@ validate_os() {
   local os_name
   os_name=$(grep -i '^NAME=' /etc/os-release | cut -d= -f2 | tr -d '"')
   if ! grep -iqE "ubuntu|kubuntu|xubuntu|lubuntu|pop!_os|elementary|zorin|linux mint" /etc/os-release; then
-    logg error "This script is intended for Ubuntu and its derivatives. Detected: $os_name. Exiting..."
-    exit 1
+    logg error "This script is intended for Ubuntu and its derivatives. Detected: $os_name"
+    exit $EXIT_ERROR
   fi
   logg success "System compatible: $os_name"
 }
@@ -1037,7 +1115,8 @@ install_script_alias() {
       echo -e "\n\n# Alias for the $DESKTOP_NAME Setup Wizard\n$alias_command\n" >>"$rc_file"
       alias_added=true
       if [[ "$SHELL" == *"${rc_file##*.}" ]]; then
-        eval "$alias_command"
+        # Safer alternative to eval: directly set the alias
+        alias "$SCRIPT_ALIAS_NAME"="$SCRIPT_PATH"
       fi
     fi
   done
@@ -1080,7 +1159,7 @@ menu() {
     if ! read -t "$MENU_TIMEOUT" -rp "$select_prompt [1-4]: " choice; then
       logg warn "Menu timeout after $MENU_TIMEOUT seconds"
       logg info "$(i18n 'exiting' 'Exiting...')"
-      exit 0
+      exit $EXIT_SUCCESS
     fi
 
     # Sanitize input
@@ -1102,13 +1181,13 @@ menu() {
         ;;
       4|"")
         logg info "$(i18n 'exiting' 'Exiting...')"
-        exit 0
+        exit $EXIT_SUCCESS
         ;;
       *)
         attempts=$((attempts + 1))
         if [[ $attempts -ge $max_attempts ]]; then
           logg error "Too many invalid menu selections. $(i18n 'exiting' 'Exiting...')"
-          exit 1
+          exit $EXIT_ERROR
         fi
         logg error "$(i18n "invalid_option" "Invalid option '$choice'. Please choose 1-4.")"
         logg info "Attempts remaining: $((max_attempts - attempts))"
@@ -1161,7 +1240,7 @@ show_system_info() {
 # -------------------------------------------------------------------
 check_cursor_installation() {
   local installed_file
-  installed_file=$(ls -1t $APPIMAGE_PATTERN 2>/dev/null | head -n 1 || true)
+  installed_file=$(ls -1t "$APPIMAGE_PATTERN" 2>/dev/null | head -n 1 || true)
 
   if [[ -n "$installed_file" ]]; then
     local installed_version
@@ -1257,8 +1336,8 @@ main() {
   validate_os
 
   if ! check_system_requirements; then
-    logg error "System requirements check failed. Please resolve the issues above and try again."
-    exit 1
+    logg error "System requirements check failed. Please resolve the issues above and try again"
+    exit $EXIT_ERROR
   fi
 
   install_script_alias
