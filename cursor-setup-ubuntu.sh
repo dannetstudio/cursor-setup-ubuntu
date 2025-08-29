@@ -391,6 +391,68 @@ get_latest_stable_version() {
 }
 
 # -------------------------------------------------------------------
+# Extract the correct download base URL from the repository content
+# -------------------------------------------------------------------
+get_dynamic_base_url() {
+  # Use configurable timeouts  
+  local ping_timeout="${CURL_PING_TIMEOUT:-2}"
+  local curl_timeout="${CURL_TIMEOUT:-5}"
+  local max_retries="${CURL_MAX_RETRIES:-3}"
+
+  # Check internet connectivity with configurable timeout
+  if ! ping -c 1 -W $ping_timeout github.com >/dev/null 2>&1 && \
+     ! ping -c 1 -W $ping_timeout gitlab.com >/dev/null 2>&1; then
+    return 1
+  fi
+
+  # Try to fetch repository content with retries and fallback URLs
+  local repo_content=""
+  local attempt=0
+
+  while [[ $attempt -lt $max_retries && -z "$repo_content" ]]; do
+    for url in "${CURSOR_REPO_URLS[@]}"; do
+      if repo_content=$(curl -s --max-time $curl_timeout \
+        -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
+        -H "Accept: text/plain, */*" \
+        --retry 2 --retry-delay 1 \
+        "$url" 2>/dev/null); then
+
+        if [[ -n "$repo_content" ]]; then
+          break 2
+        fi
+      fi
+    done
+
+    attempt=$((attempt + 1))
+    if [[ $attempt -lt $max_retries ]]; then
+      sleep 2
+    fi
+  done
+
+  if [[ -z "$repo_content" ]]; then
+    return 1
+  fi
+
+  # Look for the first Linux x64 download link which contains the version
+  local latest_download_url
+  latest_download_url=$(echo "$repo_content" | grep -oE "https://downloads\.cursor\.com/production/[a-f0-9]+/linux/x64/Cursor-[0-9]+\.[0-9]+\.[0-9]+-x86_64\.AppImage" | head -1)
+  
+  if [[ -z "$latest_download_url" ]]; then
+    return 1
+  fi
+
+  # Extract the base URL (up to production/hash/linux, without x64)
+  local base_url
+  base_url=$(echo "$latest_download_url" | sed 's|/linux/.*|/linux|')
+  
+  [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Found download URL: '$latest_download_url'"
+  [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Extracted base URL: '$base_url'"
+
+  printf "%s" "$base_url"
+  return 0
+}
+
+# -------------------------------------------------------------------
 # Download the latest stable AppImage from official Cursor servers
 # -------------------------------------------------------------------
 # This function:
@@ -423,10 +485,19 @@ download_latest_stable() {
     filename="${filename}-aarch64.AppImage"
   fi
 
-  local url="$CURSOR_DOWNLOAD_BASE_URL/$arch/$filename"
+  # Get the dynamic base URL from repository
+  local base_url
+  base_url=$(get_dynamic_base_url)
+  if [[ $? -ne 0 || -z "$base_url" ]]; then
+    logg warn "Could not get dynamic URL, falling back to hardcoded URL"
+    base_url="$CURSOR_DOWNLOAD_BASE_URL"
+  fi
+  
+  local url="$base_url/$arch/$filename"
 
   logg info "Latest stable version: $latest_version"
   logg info "Downloading file: $filename"
+  [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Using base URL: '$base_url'"
   logg info "Download URL: $url"
 
   pushd "$USER_DOWNLOADS_DIR" >/dev/null
