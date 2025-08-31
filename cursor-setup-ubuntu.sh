@@ -433,10 +433,34 @@ get_dynamic_base_url() {
     return 1
   fi
 
-  # Look for the first Linux x64 download link which contains the version
+  # Get the current version first to ensure we get the right hash
+  local current_version
+  current_version=$(echo "$repo_content" | grep -oE "Cursor [0-9]+\.[0-9]+\.[0-9]+" | head -1 | sed 's/Cursor //')
+  
+  if [[ -z "$current_version" ]]; then
+    return 1
+  fi
+
+  # Look for the Linux x64 download link for this specific version
   local latest_download_url
   latest_download_url=$(echo "$repo_content" | grep -oE "https://downloads\.cursor\.com/production/[a-f0-9]+/linux/x64/Cursor-[0-9]+\.[0-9]+\.[0-9]+-x86_64\.AppImage" | head -1)
   
+  # If Linux URL not found or doesn't match current version, try to construct it from Windows hash
+  if [[ -z "$latest_download_url" ]] || ! echo "$latest_download_url" | grep -q "$current_version"; then
+    [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Linux URL not found or version mismatch, trying Windows hash"
+    
+    # Get hash from Windows download for the current version
+    local windows_url
+    windows_url=$(echo "$repo_content" | grep -oE "https://downloads\.cursor\.com/production/[a-f0-9]+/win32/x64/.*CursorSetup.*-${current_version}\.exe" | head -1)
+    
+    if [[ -n "$windows_url" ]]; then
+      local hash
+      hash=$(echo "$windows_url" | sed -n 's|.*production/\([a-f0-9]\+\)/.*|\1|p')
+      latest_download_url="https://downloads.cursor.com/production/${hash}/linux/x64/Cursor-${current_version}-x86_64.AppImage"
+      [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Constructed URL from Windows hash: '$latest_download_url'"
+    fi
+  fi
+
   if [[ -z "$latest_download_url" ]]; then
     return 1
   fi
@@ -445,7 +469,7 @@ get_dynamic_base_url() {
   local base_url
   base_url=$(echo "$latest_download_url" | sed 's|/linux/.*|/linux|')
   
-  [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Found download URL: '$latest_download_url'"
+  [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Found/constructed download URL: '$latest_download_url'"
   [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Extracted base URL: '$base_url'"
 
   printf "%s" "$base_url"
