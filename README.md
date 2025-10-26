@@ -1,10 +1,21 @@
 # 🚀 Cursor Setup Ubuntu
 
-**Version 2.1.1** - Security & Stability Edition with Critical Fixes
+**Version 2.1.2** - Cursor 2.x Compatibility & Detection Fixes
 
 This repository contains the bash script **cursor-setup-ubuntu**, inspired by the [cursor-setup-wizard](https://github.com/jorcelinojunior/cursor-setup-wizard) repository. This script automatically downloads and installs the latest version of the **Cursor AI AppImage** on Ubuntu and its derivatives. **Cursor AI** is a powerful AI-assisted code editor, available at [cursor.com](https://www.cursor.com).
 
-## 🎉 What's New in v2.1.1
+## 🎉 What's New in v2.1.2
+
+- **✅ Cursor 2.x Support**: Full compatibility with Cursor 2.0.11 and newer 2.x versions
+- **🔍 Fixed Version Detection**: Resolved automatic version check failures from cursor-ai-downloads repository
+- **🐛 Fixed Installation Detection**: Script now properly detects installed Cursor AppImages (glob pattern fix)
+- **⚡ Improved Network Resilience**: More flexible connectivity checks with fallback to Google DNS (8.8.8.8)
+- **📊 Better Timeout Handling**: Increased curl timeout from 5s to 10s for slow or unstable connections
+- **🛡️ Enhanced Content Validation**: Validates downloaded repository content size (minimum 1KB) before processing
+- **🐞 Enhanced Debug Mode**: Extensive debug logging available with `DEBUG_MODE=true` for troubleshooting
+- **🔧 Fixed Pattern Expansion**: Removed quotes from glob patterns to allow proper shell expansion in file detection
+
+## 🎉 Previous Release - v2.1.1
 
 - **🔒 Critical Security Fixes**: Fixed unsafe variable expansion and dangerous eval usage
 - **🛡️ Enhanced Input Validation**: Comprehensive version checking and security validation

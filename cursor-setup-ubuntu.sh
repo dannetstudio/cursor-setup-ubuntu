@@ -15,14 +15,17 @@
 # - System requirements validation
 #
 # Author: Daniel Ignacio Fernández
-# Version: 2.1.1 - Security & Stability Edition with Critical Fixes
+# Version: 2.1.2 - Cursor 2.x Compatibility & Detection Fixes
 #
-# CRITICAL IMPROVEMENTS IN v2.1.0:
-# - Fixed version comparison logic (no more false update detection)
-# - Automatic language detection from system settings
-# - Clean function outputs (no log pollution)
-# - Enhanced process detection and management
-# - New system information display
+# IMPROVEMENTS IN v2.1.2:
+# - Full support for Cursor 2.x versions (tested with 2.0.11)
+# - Fixed automatic version detection from cursor-ai-downloads repository
+# - Fixed installation detection (glob pattern expansion bug)
+# - Improved network resilience (flexible ping checks with Google DNS fallback)
+# - Increased curl timeout from 5s to 10s for better reliability
+# - Enhanced content validation (minimum 1KB size check)
+# - Extensive debug mode logging for troubleshooting
+# - Fixed glob pattern quoting in check_cursor_installation() and remove_old_versions()
 # -------------------------------------------------------------------
 set -euo pipefail
 
@@ -247,13 +250,17 @@ show_message() {
 # -------------------------------------------------------------------
 remove_old_versions() {
   local newest_file
-  newest_file=$(ls -1t "$APPIMAGE_PATTERN" 2>/dev/null | head -n 1 || true)
+  # Note: APPIMAGE_PATTERN must be unquoted to allow shell glob expansion
+  newest_file=$(ls -1t $APPIMAGE_PATTERN 2>/dev/null | head -n 1 || true)
   if [[ -n "$newest_file" ]]; then
     local older_files
-    older_files=$(ls -1t "$APPIMAGE_PATTERN" 2>/dev/null | tail -n +2 || true)
+    older_files=$(ls -1t $APPIMAGE_PATTERN 2>/dev/null | tail -n +2 || true)
     if [[ -n "$older_files" ]]; then
       logg info "Removing older versions in $DOWNLOAD_DIR..."
-      rm -f "$older_files"
+      # Note: older_files contains newline-separated paths, need to handle carefully
+      echo "$older_files" | while IFS= read -r file; do
+        [[ -n "$file" ]] && rm -f "$file"
+      done
     fi
   fi
 }
@@ -336,40 +343,56 @@ detect_architecture() {
 get_latest_stable_version() {
   # Use configurable timeouts
   local ping_timeout="${CURL_PING_TIMEOUT:-2}"
-  local curl_timeout="${CURL_TIMEOUT:-5}"
+  local curl_timeout="${CURL_TIMEOUT:-10}"
   local max_retries="${CURL_MAX_RETRIES:-3}"
 
-  # Check internet connectivity with configurable timeout
-  if ! ping -c 1 -W $ping_timeout github.com >/dev/null 2>&1 && \
-     ! ping -c 1 -W $ping_timeout gitlab.com >/dev/null 2>&1; then
-    return 1
+  # Check internet connectivity with configurable timeout (optional check - don't fail if ping fails)
+  local connectivity_ok=false
+  if ping -c 1 -W $ping_timeout github.com >/dev/null 2>&1 || \
+     ping -c 1 -W $ping_timeout gitlab.com >/dev/null 2>&1 || \
+     ping -c 1 -W $ping_timeout 8.8.8.8 >/dev/null 2>&1; then
+    connectivity_ok=true
+    [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Internet connectivity confirmed"
+  else
+    [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Ping failed, but will try curl anyway"
   fi
 
   # Try to fetch repository content with retries and fallback URLs
   local repo_content=""
   local attempt=0
+  local successful_url=""
 
   while [[ $attempt -lt $max_retries && -z "$repo_content" ]]; do
     for url in "${CURSOR_REPO_URLS[@]}"; do
+      [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Attempt $((attempt + 1))/$max_retries: Trying URL: $url"
+
       if repo_content=$(curl -s --max-time $curl_timeout \
         -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
         -H "Accept: text/plain, */*" \
         --retry 2 --retry-delay 1 \
         "$url" 2>/dev/null); then
 
-        if [[ -n "$repo_content" ]]; then
+        if [[ -n "$repo_content" && ${#repo_content} -gt 1000 ]]; then
+          successful_url="$url"
+          [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Successfully fetched ${#repo_content} bytes from $url"
           break 2
+        else
+          [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Content too small or empty from $url (${#repo_content} bytes)"
         fi
+      else
+        [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Failed to fetch from $url"
       fi
     done
 
     attempt=$((attempt + 1))
     if [[ $attempt -lt $max_retries ]]; then
+      [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Waiting 2 seconds before retry..."
       sleep 2
     fi
   done
 
   if [[ -z "$repo_content" ]]; then
+    [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Failed to fetch repository content after $max_retries attempts"
     return 1
   fi
 
@@ -378,14 +401,18 @@ get_latest_stable_version() {
   latest_version=$(echo "$repo_content" | grep -oE "Cursor [0-9]+\.[0-9]+\.[0-9]+" | head -1 | sed 's/Cursor //')
 
   if [[ -z "$latest_version" ]]; then
+    [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Failed to extract version from repository content"
+    [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "First 500 chars of content: $(echo "$repo_content" | head -c 500)"
     return 1
   fi
 
   # Validate version format
   if ! [[ "$latest_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Invalid version format: $latest_version"
     return 1
   fi
 
+  [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Successfully extracted version: $latest_version from $successful_url"
   printf "%s" "$latest_version"
   return 0
 }
@@ -394,52 +421,71 @@ get_latest_stable_version() {
 # Extract the correct download base URL from the repository content
 # -------------------------------------------------------------------
 get_dynamic_base_url() {
-  # Use configurable timeouts  
+  # Use configurable timeouts
   local ping_timeout="${CURL_PING_TIMEOUT:-2}"
-  local curl_timeout="${CURL_TIMEOUT:-5}"
+  local curl_timeout="${CURL_TIMEOUT:-10}"
   local max_retries="${CURL_MAX_RETRIES:-3}"
 
-  # Check internet connectivity with configurable timeout
-  if ! ping -c 1 -W $ping_timeout github.com >/dev/null 2>&1 && \
-     ! ping -c 1 -W $ping_timeout gitlab.com >/dev/null 2>&1; then
-    return 1
+  # Check internet connectivity with configurable timeout (optional check - don't fail if ping fails)
+  local connectivity_ok=false
+  if ping -c 1 -W $ping_timeout github.com >/dev/null 2>&1 || \
+     ping -c 1 -W $ping_timeout gitlab.com >/dev/null 2>&1 || \
+     ping -c 1 -W $ping_timeout 8.8.8.8 >/dev/null 2>&1; then
+    connectivity_ok=true
+    [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Internet connectivity confirmed for base URL fetch"
+  else
+    [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Ping failed for base URL fetch, but will try curl anyway"
   fi
 
   # Try to fetch repository content with retries and fallback URLs
   local repo_content=""
   local attempt=0
+  local successful_url=""
 
   while [[ $attempt -lt $max_retries && -z "$repo_content" ]]; do
     for url in "${CURSOR_REPO_URLS[@]}"; do
+      [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Base URL fetch attempt $((attempt + 1))/$max_retries: Trying $url"
+
       if repo_content=$(curl -s --max-time $curl_timeout \
         -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
         -H "Accept: text/plain, */*" \
         --retry 2 --retry-delay 1 \
         "$url" 2>/dev/null); then
 
-        if [[ -n "$repo_content" ]]; then
+        if [[ -n "$repo_content" && ${#repo_content} -gt 1000 ]]; then
+          successful_url="$url"
+          [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Successfully fetched ${#repo_content} bytes for base URL extraction"
           break 2
+        else
+          [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Content too small or empty (${#repo_content} bytes)"
         fi
+      else
+        [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Failed to fetch from $url for base URL"
       fi
     done
 
     attempt=$((attempt + 1))
     if [[ $attempt -lt $max_retries ]]; then
+      [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Waiting 2 seconds before retry for base URL..."
       sleep 2
     fi
   done
 
   if [[ -z "$repo_content" ]]; then
+    [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Failed to fetch repository content for base URL after $max_retries attempts"
     return 1
   fi
 
   # Get the current version first to ensure we get the right hash
   local current_version
   current_version=$(echo "$repo_content" | grep -oE "Cursor [0-9]+\.[0-9]+\.[0-9]+" | head -1 | sed 's/Cursor //')
-  
+
   if [[ -z "$current_version" ]]; then
+    [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Failed to extract version for base URL extraction"
     return 1
   fi
+
+  [[ "${DEBUG_MODE:-false}" == "true" ]] && logg debug "Extracting base URL for version: $current_version"
 
   # Look for the Linux x64 download link for this specific version
   local latest_download_url
@@ -1335,7 +1381,8 @@ show_system_info() {
 # -------------------------------------------------------------------
 check_cursor_installation() {
   local installed_file
-  installed_file=$(ls -1t "$APPIMAGE_PATTERN" 2>/dev/null | head -n 1 || true)
+  # Note: APPIMAGE_PATTERN must be unquoted to allow shell glob expansion
+  installed_file=$(ls -1t $APPIMAGE_PATTERN 2>/dev/null | head -n 1 || true)
 
   if [[ -n "$installed_file" ]]; then
     local installed_version
